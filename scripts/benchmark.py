@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Latency benchmark: several passes over the eval set, end-to-end through Ollama.
 

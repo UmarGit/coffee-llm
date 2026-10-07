@@ -1,11 +1,24 @@
 [project]
 name = "coffee-llm"
-version = "0.2.0"
+version = "0.3.0"
 description = "Fine-tuned Qwen3.5-0.8B that parses spoken coffee orders (RU/EN) into a compact format"
 readme = "README.md"
 # Pinned to 3.12 (the version this project was developed and evaluated on).
 requires-python = ">=3.12,<3.13"
 dependencies = []
+
+[project.optional-dependencies]
+# Training/eval harness for the NoRA vs LoRA study. Install the NoRA PEFT fork last:
+#   pip install "git+https://github.com/Joluck/NoRA.git#subdirectory=peft"
+research = [
+    "torch>=2.4",
+    "transformers>=5",
+    "trl>=0.21",
+    "datasets>=3",
+    "matplotlib>=3.8",
+    "pandas>=2",
+]
+dev = ["pytest>=8"]
 
 [build-system]
 requires = ["hatchling"]
@@ -13,3 +26,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/coffee_parser"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

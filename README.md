@@ -117,6 +117,65 @@ Training runs in Colab (T4) with Unsloth + LoRA on a synthetic dataset, 1 epoch.
 GGUF and uploads it to `umarsheikh303/coffee-parser-gguf`. Strip cell outputs before
 committing.
 
+The dataset generator lives in [generator.py](src/coffee_parser/generator.py), shared with the
+research notebook. `production_dataset()` reproduces exactly the 4000 examples this model was
+trained on, pinned by a test against a frozen copy of the original inline code.
+
+## Research: NoRA vs LoRA
+
+[nora_vs_lora.ipynb](notebooks/nora_vs_lora.ipynb) compares **LoRA**, **NoRA-init** and **NoRA**
+on this task, for a paper. The method is from Jiale Kang, Ziyin Yue, Zheng Zhan, Yangyi Huang and
+Weiyang Liu, *Normalized Low-Rank Adaptation*, [arXiv:2608.31036](https://arxiv.org/abs/2608.31036)
+(2026) — the full title matters, since other unrelated papers also use the name "NoRA". It
+constrains each column of `lora_A.weight` (shape `r × in_features`) to unit L2 norm along the rank
+dimension, so a column is a direction and all magnitude sits in `lora_B`.
+
+- **NoRA-init** — normalize once after initialization, then train as plain LoRA.
+- **NoRA** — keep the constraint throughout training.
+
+```bash
+pip install -e ".[research,dev]"
+pip install "git+https://github.com/Joluck/NoRA.git#subdirectory=peft"   # install LAST
+pytest
+```
+
+The official [PEFT fork](https://github.com/Joluck/NoRA) is used (`use_nora=True` /
+`use_nora="init"`), verified working with transformers 5.19 + TRL 1.14 + peft 0.19.2.dev0.
+Install it last: anything that resolves `peft` from PyPI afterwards silently replaces it, which
+the notebook asserts against. [nora.py](src/coffee_parser/nora.py) also carries an independent
+`torch.nn.utils.parametrize` implementation that the tests cross-check against the fork and
+against the closed form `ΔW = α/r · B · Norm(A)`.
+
+No Unsloth in this study: transformers + TRL + PEFT for every method, identical stack and
+settings except the `LoraConfig`. Loss is on the answer only, via TRL's prompt/completion
+format — which also avoids the `<think>` masking bug above.
+
+Four things found while implementing it, all of which affect how results should be read:
+
+- **Continuous NoRA does not constrain the stored parameter.** The fork normalizes inside
+  `forward()` and `get_delta_weight()`, so `lora_A.weight` itself drifts during training.
+  Invariant checks must test the effective matrix `A/‖A‖`; a check on the raw parameter fails
+  against the reference implementation.
+- **The epsilon is additive, not a clamp:** `A / (‖A‖ + 1e-6)`. Column norms land at
+  `1 − O(1e-5)` in fp32, never exactly 1.
+- **Under bf16, NoRA-init is only approximately normalized.** The fork normalizes `lora_A`
+  and then calls `_move_adapter_to_device_of_base_layer`, which round-trips the weights
+  through the base dtype. With a bf16 base the columns come out unit-norm to about `2e-3`,
+  stored in an fp32 tensor — so `lora_A.dtype` reports fp32 while the values carry bf16
+  rounding, and dtype-blind tolerances fail every bf16 run. `norm_atol()` derives the
+  tolerance from the base dtype as well as the adapter dtype. The rounding (≈2e-3) is three
+  orders of magnitude larger than the epsilon (1e-6), so on GPU it is the only term that
+  matters.
+- **BIMI is not implemented in the published fork.** `bimi_init()` is
+  `with torch.no_grad(): pass` with the block-identity code commented out, so
+  `init_lora_weights="bimi"` silently falls back to default LoRA init. There is no BIMI arm.
+- **The paper's LoRA baseline uses `alpha = 2r` while NoRA uses `alpha = r`**, so scaling is
+  confounded with normalization. The grid adds a `lora_alpha_r` arm (LoRA at `alpha = r`) to
+  separate the two.
+
+The notebook's final cell lists the remaining caveats; the headline one is that every split comes
+from the same generator, so the `hard` split raises difficulty but not realism.
+
 ## Known issues
 
 - **Training marks the `<think>` block as part of the answer.** `train_on_responses_only`
@@ -135,9 +194,13 @@ committing.
 ## Layout
 
 ```
-src/coffee_parser/   menu vocabulary, parsing, Ollama raw-mode client, eval set
+src/coffee_parser/   menu.py, parsing.py, ollama.py, testset.py   production
+                     generator.py                                 shared data generator
+                     nora.py, experiment.py                        research only (needs torch)
 scripts/             coffee_eval.py (accuracy), benchmark.py (latency)
-notebooks/           Colab training notebook
+notebooks/           coffee_order_finetune.ipynb (production), nora_vs_lora.ipynb (research)
+tests/               pytest suite; data/ holds the frozen generator reference
 ollama/              Modelfile
 models/              weights, git-ignored
+runs/                research results, curves, figures (git-ignored)
 ```

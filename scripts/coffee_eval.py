@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Accuracy test for the coffee order parser, run against Ollama.
 

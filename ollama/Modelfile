@@ -1,0 +1,14 @@
+FROM ../models/coffee-q8_0.gguf
+TEMPLATE """<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+PARAMETER temperature 0
+PARAMETER num_predict 32
+PARAMETER stop <|im_end|>
+PARAMETER stop <|endoftext|>
+PARAMETER stop </think>

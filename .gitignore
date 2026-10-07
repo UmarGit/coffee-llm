@@ -1,0 +1,25 @@
+# Model weights (download from Hugging Face instead -- see README)
+models/
+*.gguf
+*.safetensors
+
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Hugging Face download state
+.cache/
+
+# Colab / Jupyter
+.ipynb_checkpoints/
+outputs/
+
+# macOS
+.DS_Store

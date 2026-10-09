@@ -21,8 +21,6 @@ wheels/
 .ipynb_checkpoints/
 outputs/
 
-# Research run artefacts
-runs/
 .pytest_cache/
 
 # macOS

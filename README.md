@@ -140,13 +140,82 @@ uv run --extra dev pytest
   written by the same person imagining how people order, so 98% likely overstates real
   performance. Real speech-to-text transcripts are needed before trusting the number.
 
+## Benchmark: PIZZA
+
+[pizza_experiments.ipynb](notebooks/pizza_experiments.ipynb) evaluates this project's approach —
+Qwen3.5-0.8B + LoRA SFT + a compact output format — on the public
+[PIZZA](https://github.com/amazon-science/pizza-semantic-parsing-dataset) semantic-parsing
+benchmark (Arkoudas et al., 2022).
+
+> **Licensing.** PIZZA is **CC-BY-NC-4.0**. The dataset, anything derived from it, and any model
+> trained on it are non-commercial: they must not be used by the production café parser and must
+> not be committed. `data/external/`, `data/pizza/` and `pizza-runs/` are git-ignored.
+
+### Setup
+
+```bash
+git clone --depth 1 https://github.com/amazon-science/pizza-semantic-parsing-dataset.git \
+  data/external/pizza
+uv run --extra dev --extra pizza pytest tests/test_pizza_formats.py
+```
+
+The round-trip tests are a gate: they must pass before any experiment is meaningful. They check
+`EXR → DSL → EXR` and `EXR → JSON → EXR` on all of dev (348), all of test (1357) and a 50k train
+sample, requiring the reconstruction to be *character-identical* to the input.
+
+### The compact DSL
+
+| token | meaning |
+|---|---|
+| `p` / `d` | PIZZAORDER / DRINKORDER, joined by ` ; ` |
+| digits | `NUMBER` |
+| `20floz`, `500ml`, `2liter` | `VOLUME amount unit` |
+| bare word | `TOPPING` \| `SIZE` \| `STYLE` \| `DRINKTYPE` \| `CONTAINERTYPE`, resolved by catalog |
+| `^x` | `STYLE` |
+| `+x` / `~x` | `COMPLEX_TOPPING` with `QUANTITY EXTRA` / `LIGHT` |
+| `!x` | `NOT(x)`, composes — `!+cheese` is NOT over a complex topping |
+
+```
+EXR  (ORDER (PIZZAORDER (NOT (TOPPING PESTO ) ) (NUMBER 2 ) (SIZE MEDIUM )
+             (COMPLEX_TOPPING (QUANTITY EXTRA ) (TOPPING CHEESE ) ) (TOPPING TUNA ) ) )
+DSL  p !pesto 2 medium +cheese tuna
+```
+
+Entity ids are the lowercased EXR symbols (a verified bijection) and the vocabulary comes from
+the dataset's own `utils/catalogs/`, which covers every entity occurring in all three splits.
+Mean output length on test, in Qwen3.5 tokens: **EXR 45.0, JSON 46.1, DSL 10.8** — the DSL is
+4.15× shorter than EXR.
+
+### Reproducing each table
+
+| Table / figure | How |
+|---|---|
+| Output tokens per format | notebook §3 → `tables/output_tokens.csv` |
+| Few-shot baseline (condition A) | notebook §4 |
+| LR selection (dev only) | notebook §5 |
+| Data-efficiency curve (condition B) | notebook §6, §9 → `figures/data_efficiency_dev.pdf` |
+| Main test table vs published baselines | notebook §7, §9 → `tables/main.csv` / `.tex` |
+| Slot P/R/F1 and hallucination rates | notebook §9 → `tables/slot_prf.csv`, `hallucination.csv` |
+| Grammar-constrained decoding (condition C) | notebook §8, then `scripts/pizza_latency.py --grammar` |
+| On-device latency | `uv run python scripts/pizza_latency.py --backend ollama --model <m> --format dsl` |
+| Error taxonomy | notebook §10 → `tables/error_taxonomy.csv` |
+
+Exact match always uses the dataset's own `semantic_matchers.is_unordered_exact_match`; it is
+never reimplemented. Dev drives every selection decision and test is evaluated once per final
+configuration. Published baselines (PCFG 68.02, BERT 64.08, BART-Large EXR 78.56, BART on the
+PCFG-error subset 59.49) are cited, not re-run — and they used the full 2.46M-utterance train
+set, while these runs use 1k/5k/20k from the 10% split.
+
 ## Layout
 
 ```
-src/coffee_parser/   menu.py, parsing.py, ollama.py, testset.py, generator.py
-scripts/             coffee_eval.py (accuracy), benchmark.py (latency)
-notebooks/           coffee_order_finetune.ipynb
+src/coffee_parser/   production parser: menu, parsing, ollama client, testset, generator
+src/pizza_bench/     PIZZA benchmark: data, formats, metrics, grammar, experiment, report
+scripts/             coffee_eval.py, benchmark.py, pizza_latency.py
+notebooks/           coffee_order_finetune.ipynb, pizza_experiments.ipynb
 tests/               pytest suite; data/ holds the frozen generator reference
 ollama/              Modelfile
 models/              weights, git-ignored
+data/external/       PIZZA dataset, git-ignored (CC-BY-NC-4.0)
+pizza-runs/          PIZZA results, git-ignored
 ```

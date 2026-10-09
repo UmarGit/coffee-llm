@@ -7,9 +7,18 @@ from .parsing import parse_compact, to_json
 from .testset import TEST_SET, category
 
 __all__ = [
-    "DRINK_CODES", "MILKS", "SIZES", "SYRUPS", "UNCLEAR",
-    "PROMPT", "STOPS", "clean", "generate",
-    "parse_compact", "to_json",
-    "TEST_SET", "category",
+    "DRINK_CODES",
+    "MILKS",
+    "PROMPT",
+    "SIZES",
+    "STOPS",
+    "SYRUPS",
+    "TEST_SET",
+    "UNCLEAR",
+    "category",
+    "clean",
+    "generate",
     "generator",
+    "parse_compact",
+    "to_json",
 ]

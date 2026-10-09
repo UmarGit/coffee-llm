@@ -4,6 +4,7 @@ Accuracy test for the coffee order parser, run against Ollama.
 Usage:
   uv run python scripts/coffee_eval.py
 """
+
 import argparse
 from collections import Counter
 
@@ -36,14 +37,18 @@ def main():
         print(f"✗ {text}\n    want: {exp}\n    got:  {got}")
     print("-" * 60)
     total_ok = sum(v for k, v in stats.items() if k.endswith("_ok"))
-    print(f"Overall:    {total_ok}/{len(TEST_SET)}  ({100*total_ok/len(TEST_SET):.0f}%)")
+    print(
+        f"Overall:    {total_ok}/{len(TEST_SET)}  ({100 * total_ok / len(TEST_SET):.0f}%)"
+    )
     for cat in ["order", "partial", "not-order"]:
         t = stats[cat + "_total"]
         if t:
-            print(f"{cat:11} {stats[cat+'_ok']}/{t}")
+            print(f"{cat:11} {stats[cat + '_ok']}/{t}")
     times.sort()
-    print(f"Latency:    median {times[len(times)//2]:.0f} ms | worst {times[-1]:.0f} ms "
-          f"| avg {sum(toks)/len(toks):.0f} output tokens")
+    print(
+        f"Latency:    median {times[len(times) // 2]:.0f} ms | worst {times[-1]:.0f} ms "
+        f"| avg {sum(toks) / len(toks):.0f} output tokens"
+    )
 
 
 if __name__ == "__main__":

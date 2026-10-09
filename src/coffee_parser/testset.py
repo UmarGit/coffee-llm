@@ -3,6 +3,7 @@
 Written separately from the training generator. Some slang (флэтик, капучиночку)
 is deliberately NOT in the generator, to test generalization.
 """
+
 from .menu import UNCLEAR
 
 TEST_SET = [
@@ -36,7 +37,10 @@ TEST_SET = [
     ("2 американо и 1 эспрессо", "ame x2;esp"),
     ("мне эспрессо и еще один эспрессо", "esp x2"),
     # multiple items
-    ("здравствуйте мне пожалуйста латте с ореховым сиропом и маленький американо", "lat hazelnut;ame S"),
+    (
+        "здравствуйте мне пожалуйста латте с ореховым сиропом и маленький американо",
+        "lat hazelnut;ame S",
+    ),
     ("капучино средний на миндальном и какао большое", "cap M almond;coc L"),
     ("два капучино один на миндальном", "cap almond;cap"),
     ("два раф один с ванилью другой с карамелью", "raf vanilla;raf caramel"),

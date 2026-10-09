@@ -4,6 +4,7 @@ Compact format:  `cap L oat;lat x2`
   items separated by `;`, each `drink [size] [milk] [syrup] [xN]`
   `?` = not an order, off-menu, or too vague
 """
+
 from collections import Counter
 
 from .menu import DRINK_CODES, MILKS, SIZES, SYRUPS, UNCLEAR

@@ -7,49 +7,201 @@ for an eval split that is not at the accuracy ceiling.
 Spoken variants live here; the output vocabulary lives in menu.py. The two are kept
 consistent by `assert_menu_consistent()`.
 """
-import random
-from dataclasses import dataclass, replace
 
-from .menu import DRINK_CODES, MILKS as MENU_MILKS, SIZES as MENU_SIZES, SYRUPS as MENU_SYRUPS
+import random
+from dataclasses import dataclass
+
+from .menu import (
+    DRINK_CODES,
+)
+from .menu import (
+    MILKS as MENU_MILKS,
+)
+from .menu import (
+    SIZES as MENU_SIZES,
+)
+from .menu import (
+    SYRUPS as MENU_SYRUPS,
+)
 
 DRINKS = {
-    "cap": {"ru": ["капучино", "капуччино", "капучина", "капчино", "капучинку", "капучинка"], "en": ["cappuccino", "capuccino", "cappuccinos"]},
-    "lat": {"ru": ["латте", "лате", "латэ", "латтешку", "латтешка"], "en": ["latte", "lattes", "late"]},
-    "ame": {"ru": ["американо", "американа", "американчик"], "en": ["americano", "americanos"]},
-    "esp": {"ru": ["эспрессо", "экспрессо", "эспресо", "эспрессик"], "en": ["espresso", "expresso", "espressos"]},
-    "fw":  {"ru": ["флэт уайт", "флет вайт", "флэтуайт"], "en": ["flat white", "flat whites", "flatwhite"]},
+    "cap": {
+        "ru": [
+            "капучино",
+            "капуччино",
+            "капучина",
+            "капчино",
+            "капучинку",
+            "капучинка",
+        ],
+        "en": ["cappuccino", "capuccino", "cappuccinos"],
+    },
+    "lat": {
+        "ru": ["латте", "лате", "латэ", "латтешку", "латтешка"],
+        "en": ["latte", "lattes", "late"],
+    },
+    "ame": {
+        "ru": ["американо", "американа", "американчик"],
+        "en": ["americano", "americanos"],
+    },
+    "esp": {
+        "ru": ["эспрессо", "экспрессо", "эспресо", "эспрессик"],
+        "en": ["espresso", "expresso", "espressos"],
+    },
+    "fw": {
+        "ru": ["флэт уайт", "флет вайт", "флэтуайт"],
+        "en": ["flat white", "flat whites", "flatwhite"],
+    },
     "raf": {"ru": ["раф", "раф кофе", "рафик"], "en": ["raf", "raf coffee"]},
-    "fil": {"ru": ["фильтр кофе", "фильтр", "черный кофе", "кофе из фильтра"], "en": ["filter coffee", "drip coffee", "black coffee"]},
+    "fil": {
+        "ru": ["фильтр кофе", "фильтр", "черный кофе", "кофе из фильтра"],
+        "en": ["filter coffee", "drip coffee", "black coffee"],
+    },
     "coc": {"ru": ["какао", "горячий шоколад"], "en": ["cocoa", "hot chocolate"]},
     "mat": {"ru": ["матча латте", "матча", "матчу"], "en": ["matcha latte", "matcha"]},
-    "ice": {"ru": ["айс латте", "холодный латте", "латте со льдом"], "en": ["iced latte", "ice latte", "cold latte"]},
+    "ice": {
+        "ru": ["айс латте", "холодный латте", "латте со льдом"],
+        "en": ["iced latte", "ice latte", "cold latte"],
+    },
 }
-SIZES = {"S": {"ru": ["маленький", "маленькую", "маленькое", "поменьше"], "en": ["small"]},
-         "M": {"ru": ["средний", "среднюю", "стандартный", "обычный"], "en": ["medium", "regular"]},
-         "L": {"ru": ["большой", "большую", "большое", "побольше"], "en": ["large", "big"]}}
-MILKS = {"oat": {"ru": ["на овсяном", "на овсяном молоке", "с овсяным молоком"], "en": ["with oat milk", "oat"]},
-         "almond": {"ru": ["на миндальном", "с миндальным молоком"], "en": ["with almond milk", "almond"]},
-         "coconut": {"ru": ["на кокосовом", "на кокосовом молоке"], "en": ["with coconut milk", "coconut"]},
-         "lactosefree": {"ru": ["на безлактозном", "на безлактозном молоке"], "en": ["lactose free", "with lactose free milk"]},
-         "nomilk": {"ru": ["без молока"], "en": ["no milk", "without milk"]}}
-SYRUPS = {"vanilla": {"ru": ["с ванильным сиропом", "с ванилью", "ванильный"], "en": ["with vanilla syrup", "vanilla"]},
-          "caramel": {"ru": ["с карамелью", "с карамельным сиропом", "карамельный"], "en": ["with caramel", "caramel"]},
-          "hazelnut": {"ru": ["с ореховым сиропом", "с лесным орехом", "ореховый"], "en": ["with hazelnut", "hazelnut"]}}
-QTY = {"ru": {1: ["", "один", "одну", "одно"], 2: ["два", "две", "2"], 3: ["три", "3"], 4: ["четыре", "4"]},
-       "en": {1: ["", "one", "a", "an"], 2: ["two", "2"], 3: ["three", "3"], 4: ["four", "4"]}}
-NOISE = {"ru": ["с собой", "на вынос", "здесь", "без сахара", "погорячее", "пожалуйста"],
-         "en": ["to go", "for here", "no sugar", "please"]}
-FILLERS = {"ru": ["здравствуйте", "мне пожалуйста", "можно", "дайте", "я бы хотел", "будьте добры", "эээ", "ну", "добрый день", ""],
-           "en": ["hi", "can i get", "i'd like", "let me get", "um", "could i have", ""]}
+SIZES = {
+    "S": {"ru": ["маленький", "маленькую", "маленькое", "поменьше"], "en": ["small"]},
+    "M": {
+        "ru": ["средний", "среднюю", "стандартный", "обычный"],
+        "en": ["medium", "regular"],
+    },
+    "L": {"ru": ["большой", "большую", "большое", "побольше"], "en": ["large", "big"]},
+}
+MILKS = {
+    "oat": {
+        "ru": ["на овсяном", "на овсяном молоке", "с овсяным молоком"],
+        "en": ["with oat milk", "oat"],
+    },
+    "almond": {
+        "ru": ["на миндальном", "с миндальным молоком"],
+        "en": ["with almond milk", "almond"],
+    },
+    "coconut": {
+        "ru": ["на кокосовом", "на кокосовом молоке"],
+        "en": ["with coconut milk", "coconut"],
+    },
+    "lactosefree": {
+        "ru": ["на безлактозном", "на безлактозном молоке"],
+        "en": ["lactose free", "with lactose free milk"],
+    },
+    "nomilk": {"ru": ["без молока"], "en": ["no milk", "without milk"]},
+}
+SYRUPS = {
+    "vanilla": {
+        "ru": ["с ванильным сиропом", "с ванилью", "ванильный"],
+        "en": ["with vanilla syrup", "vanilla"],
+    },
+    "caramel": {
+        "ru": ["с карамелью", "с карамельным сиропом", "карамельный"],
+        "en": ["with caramel", "caramel"],
+    },
+    "hazelnut": {
+        "ru": ["с ореховым сиропом", "с лесным орехом", "ореховый"],
+        "en": ["with hazelnut", "hazelnut"],
+    },
+}
+QTY = {
+    "ru": {
+        1: ["", "один", "одну", "одно"],
+        2: ["два", "две", "2"],
+        3: ["три", "3"],
+        4: ["четыре", "4"],
+    },
+    "en": {
+        1: ["", "one", "a", "an"],
+        2: ["two", "2"],
+        3: ["three", "3"],
+        4: ["four", "4"],
+    },
+}
+NOISE = {
+    "ru": ["с собой", "на вынос", "здесь", "без сахара", "погорячее", "пожалуйста"],
+    "en": ["to go", "for here", "no sugar", "please"],
+}
+FILLERS = {
+    "ru": [
+        "здравствуйте",
+        "мне пожалуйста",
+        "можно",
+        "дайте",
+        "я бы хотел",
+        "будьте добры",
+        "эээ",
+        "ну",
+        "добрый день",
+        "",
+    ],
+    "en": ["hi", "can i get", "i'd like", "let me get", "um", "could i have", ""],
+}
 AND = {"ru": [" и ", " еще ", " и еще ", " плюс "], "en": [" and ", " also ", " plus "]}
-FIX = {"ru": ["нет лучше", "ой нет давайте", "точнее", "нет подождите"], "en": ["actually scratch that", "no wait make it", "sorry i mean"]}
-OFF_MENU = {"ru": ["черный чай", "зеленый чай", "чай", "круассан", "чизкейк", "сэндвич", "пиво", "лимонад", "смузи", "бутылку воды", "мятный раф", "кофе с корицей"],
-            "en": ["tea", "croissant", "muffin", "sandwich", "beer", "a bottle of water", "smoothie"]}
-NON_ORDERS = {"ru": ["где туалет", "а туалет где", "какой пароль от вайфая", "можно картой", "вы до скольки работаете", "что посоветуете",
-                     "как всегда", "мне как в прошлый раз", "что-нибудь горячее", "просто кофе", "какой-нибудь кофе", "у вас есть розетка",
-                     "сколько стоит {d}", "а {d} вкусный", "спасибо большое", "хорошего дня", "подождите секунду", "я еще думаю"],
-              "en": ["where is the restroom", "what's the wifi password", "can i pay by card", "what do you recommend", "just coffee",
-                     "the usual", "how much is the {d}", "thank you", "have a nice day", "give me a second"]}
+FIX = {
+    "ru": ["нет лучше", "ой нет давайте", "точнее", "нет подождите"],
+    "en": ["actually scratch that", "no wait make it", "sorry i mean"],
+}
+OFF_MENU = {
+    "ru": [
+        "черный чай",
+        "зеленый чай",
+        "чай",
+        "круассан",
+        "чизкейк",
+        "сэндвич",
+        "пиво",
+        "лимонад",
+        "смузи",
+        "бутылку воды",
+        "мятный раф",
+        "кофе с корицей",
+    ],
+    "en": [
+        "tea",
+        "croissant",
+        "muffin",
+        "sandwich",
+        "beer",
+        "a bottle of water",
+        "smoothie",
+    ],
+}
+NON_ORDERS = {
+    "ru": [
+        "где туалет",
+        "а туалет где",
+        "какой пароль от вайфая",
+        "можно картой",
+        "вы до скольки работаете",
+        "что посоветуете",
+        "как всегда",
+        "мне как в прошлый раз",
+        "что-нибудь горячее",
+        "просто кофе",
+        "какой-нибудь кофе",
+        "у вас есть розетка",
+        "сколько стоит {d}",
+        "а {d} вкусный",
+        "спасибо большое",
+        "хорошего дня",
+        "подождите секунду",
+        "я еще думаю",
+    ],
+    "en": [
+        "where is the restroom",
+        "what's the wifi password",
+        "can i pay by card",
+        "what do you recommend",
+        "just coffee",
+        "the usual",
+        "how much is the {d}",
+        "thank you",
+        "have a nice day",
+        "give me a second",
+    ],
+}
 NO_MILK_DRINKS = {"esp", "ame", "fil"}
 
 
@@ -91,7 +243,7 @@ HARD = Difficulty(
 def _typo(rng, w, p):
     if len(w) > 4 and rng.random() < p:
         i = rng.randrange(1, len(w) - 1)
-        return w[:i] + w[i + 1:]
+        return w[:i] + w[i + 1 :]
     return w
 
 
@@ -106,7 +258,11 @@ def _make_item(rng, lang, cfg):
     d = rng.choice(list(DRINKS))
     qty = rng.choices([1, 2, 3], [0.8, 0.15, 0.05])[0]
     size = rng.choice(list(SIZES)) if rng.random() < cfg.size_rate else None
-    milk = rng.choice(list(MILKS)) if d not in NO_MILK_DRINKS and rng.random() < cfg.milk_rate else None
+    milk = (
+        rng.choice(list(MILKS))
+        if d not in NO_MILK_DRINKS and rng.random() < cfg.milk_rate
+        else None
+    )
     syrup = rng.choice(list(SYRUPS)) if rng.random() < cfg.syrup_rate else None
     mods = []
     if size:
@@ -120,7 +276,9 @@ def _make_item(rng, lang, cfg):
     rng.shuffle(mods)
     split = rng.randint(0, len(mods))
     q = rng.choice(QTY[lang][qty])
-    words = ([q] if q else []) + mods[:split] + [rng.choice(DRINKS[d][lang])] + mods[split:]
+    words = (
+        ([q] if q else []) + mods[:split] + [rng.choice(DRINKS[d][lang])] + mods[split:]
+    )
     text = " ".join(words)
     if size and rng.random() < cfg.size_correction_rate:
         new = rng.choice([s for s in SIZES if s != size])
@@ -161,10 +319,18 @@ def make_example(rng, cfg=DEFAULT):
     lang = rng.choices(["ru", "en"], [1 - cfg.en_rate, cfg.en_rate])[0]
     r = rng.random()
     if r < cfg.p_non_order:
-        t = rng.choice(NON_ORDERS[lang]).replace("{d}", rng.choice(DRINKS[rng.choice(list(DRINKS))][lang]))
-        return {"input": _finish(rng, t, lang, cfg) if rng.random() < 0.3 else t, "output": "?"}
+        t = rng.choice(NON_ORDERS[lang]).replace(
+            "{d}", rng.choice(DRINKS[rng.choice(list(DRINKS))][lang])
+        )
+        return {
+            "input": _finish(rng, t, lang, cfg) if rng.random() < 0.3 else t,
+            "output": "?",
+        }
     if r < cfg.p_off_menu:
-        return {"input": _finish(rng, rng.choice(OFF_MENU[lang]), lang, cfg), "output": "?"}
+        return {
+            "input": _finish(rng, rng.choice(OFF_MENU[lang]), lang, cfg),
+            "output": "?",
+        }
     if r < cfg.p_split_pair:
         out, text = _split_pair(rng, lang)
         return {"input": _finish(rng, text, lang, cfg), "output": out}
@@ -202,7 +368,9 @@ def generate_unique(n, seed, cfg=DEFAULT, exclude=(), max_tries=60):
         out.append(ex)
         if len(out) == n:
             return out
-    raise RuntimeError(f"only produced {len(out)}/{n} unique examples; widen the generator or lower n")
+    raise RuntimeError(
+        f"only produced {len(out)}/{n} unique examples; widen the generator or lower n"
+    )
 
 
 def assert_menu_consistent():

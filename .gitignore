@@ -25,3 +25,8 @@ outputs/
 
 # macOS
 .DS_Store
+
+# PIZZA benchmark data (CC-BY-NC-4.0: must stay out of git)
+data/external/
+data/pizza/
+pizza-runs/

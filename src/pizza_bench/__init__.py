@@ -1,20 +1,13 @@
-"""PIZZA semantic-parsing benchmark harness.
+"""PIZZA output-length study.
 
-The dataset is CC-BY-NC-4.0. Nothing here may be used by the production cafe parser,
-and neither the data nor PIZZA-trained models belong in git.
+The dataset is CC-BY-NC-4.0. Neither the data, the predictions nor any adapter trained on
+it may be used by the production cafe parser or committed to git. See PROTOCOL.md.
 """
-from . import data, formats, grammar, metrics
-from .formats import decode, encode, parse_exr, to_dsl, to_exr, to_json
+from . import config, data, formats, grammar, ladder, metrics
+from .formats import ARMS, LADDER_ARMS, MATCHED_PAIRS, decode, encode, parse_exr, to_exr
 
 __all__ = [
-           "data",
-           "decode",
-           "encode",
-           "formats",
-           "grammar",
-           "metrics",
-           "parse_exr",
-           "to_dsl",
-           "to_exr",
-           "to_json",
+    "config", "data", "formats", "grammar", "ladder", "metrics",
+    "ARMS", "LADDER_ARMS", "MATCHED_PAIRS",
+    "decode", "encode", "parse_exr", "to_exr",
 ]

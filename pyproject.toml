@@ -10,7 +10,22 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # PIZZA benchmark (CC-BY-NC-4.0 data; never used by the production parser).
-pizza = ["anytree>=2.12"]
+pizza = ["anytree>=2.12", "matplotlib>=3.8"]
+
+[dependency-groups]
+# GPU-only, installed on the server with: uv sync --group gpu
+# Kept out of the default environment so the Mac is unaffected.
+gpu = [
+    "torch>=2.4",
+    "transformers>=5",
+    "trl>=0.21",
+    "peft>=0.14",
+    "datasets>=3",
+    "accelerate>=1.0",
+    "unsloth",
+    "unsloth_zoo",
+    "xgrammar",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,3 +37,7 @@ packages = ["src/coffee_parser", "src/pizza_bench"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# Tests that scan the full 2.46M pool are deselected by default so the suite stays fast.
+# `make test-all` (or `pytest -m slow`) runs them; `make check` covers the same ground.
+addopts = "-m 'not slow'"
+markers = ["slow: scans the full training pool, tens of seconds"]

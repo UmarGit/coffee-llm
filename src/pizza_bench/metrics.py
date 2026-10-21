@@ -1,17 +1,36 @@
-"""Metrics. Exact match always goes through the dataset's own semantic matcher.
+"""Metrics. Exact match always goes through the dataset's own matcher.
 
-The official utils use flat imports and print to stdout when a tree fails to build, so
-they are loaded with utils/ on sys.path and their output is captured rather than leaked.
+Error definitions, all per utterance and all computed on the predicted tree against the
+gold tree after converting the arm's output back to EXR:
+
+  parse_validity        the output converts to a well-formed EXR tree
+  hallucinated_entity   a leaf (constructor, value) present in the prediction and absent
+                        from gold, excluding NUMBER. Multiset difference, so a topping
+                        predicted twice but present once counts as one hallucination.
+  wrong_number          a NUMBER leaf present in the prediction and absent from gold.
+                        Separated from hallucinated_entity because an invented count is a
+                        different failure from an invented topping.
+  missing_entity        a gold leaf absent from the prediction (multiset difference).
+  extra_suborder        predicted PIZZAORDER + DRINKORDER count above gold.
+  missing_suborder      predicted suborder count below gold.
+  merged_suborder       predicted suborder count below gold while every non-NUMBER gold leaf
+                        is still present, indicating two orders were collapsed into one
+                        rather than one being dropped. NUMBER is excluded because collapsing
+                        two suborders necessarily loses one of their counts, so requiring it
+                        to survive would make the category unreachable.
+
+The official utils use flat imports and print to stdout when a tree fails to build, so they
+are loaded with utils/ on sys.path and their output is captured.
 """
-
 import contextlib
 import io
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
 
-from .formats import PIZZA_DIR, parse_exr, to_exr_from
+from .formats import PIZZA_DIR, decode, parse_exr, to_exr
+
 
 
 @lru_cache(maxsize=1)
@@ -22,47 +41,44 @@ def _official():
     if str(utils) not in sys.path:
         sys.path.insert(0, str(utils))
     import semantic_matchers
-
     return semantic_matchers
 
 
 def exact_match(pred_exr, gold_exr):
-    """Unordered EM via the official matcher. Never reimplemented here."""
+    """Unordered EM from the official matcher. Never reimplemented here."""
     m = _official()
     with contextlib.redirect_stdout(io.StringIO()):
         return bool(m.is_unordered_exact_match(pred_exr, gold_exr, "EXR"))
 
 
-def to_exr_or_none(text, fmt):
+def to_exr_or_none(text, arm):
     try:
-        exr = to_exr_from(text, fmt)
-    except Exception:
-        return None
-    try:
+        exr = to_exr(decode(text, arm))
         parse_exr(exr)
+        return exr
     except Exception:
         return None
-    return exr
 
 
-def _slots(node, out, path=()):
+def _leaves(node, path=(), out=None):
+    out = [] if out is None else out
     ctor, kids = node
-    leaves = [k for k in kids if isinstance(k, str)]
-    children = [k for k in kids if not isinstance(k, str)]
-    if leaves:
-        out[(ctor,) + path].append(" ".join(leaves))
-    for c in children:
-        _slots(c, out, path + (ctor,) if ctor in ("NOT", "COMPLEX_TOPPING") else path)
+    nxt = path + (ctor,) if ctor in ("NOT", "COMPLEX_TOPPING") else path
+    leaf = [k for k in kids if isinstance(k, str)]
+    if leaf:
+        out.append(((ctor,) + path, " ".join(leaf)))
+    for k in kids:
+        if not isinstance(k, str):
+            _leaves(k, nxt, out)
+    return out
 
 
-def slot_bags(exr):
-    """Multiset of (slot, value) per utterance, with NOT/COMPLEX_TOPPING kept in the key."""
-    from collections import defaultdict
+def leaf_bag(exr):
+    return Counter(_leaves(parse_exr(exr)))
 
-    bags = defaultdict(list)
-    for sub in parse_exr(exr)[1]:
-        _slots(sub, bags)
-    return {k: Counter(v) for k, v in bags.items()}
+
+def suborder_count(exr):
+    return len(parse_exr(exr)[1])
 
 
 SLOT_GROUPS = {
@@ -79,105 +95,75 @@ SLOT_GROUPS = {
 
 
 def prf(preds_exr, golds_exr):
-    """Micro P/R/F1 per slot group over multisets of (slot, value)."""
-    tp = Counter()
-    fp = Counter()
-    fn = Counter()
+    tp, fp, fn = Counter(), Counter(), Counter()
     for pred, gold in zip(preds_exr, golds_exr):
-        pbags = slot_bags(pred) if pred else {}
-        gbags = slot_bags(gold)
+        pb = leaf_bag(pred) if pred else Counter()
+        gb = leaf_bag(gold)
         for name, keep in SLOT_GROUPS.items():
-            p = Counter()
-            g = Counter()
-            for k, c in pbags.items():
-                if keep(k):
-                    p.update({(k, v): n for v, n in c.items()})
-            for k, c in gbags.items():
-                if keep(k):
-                    g.update({(k, v): n for v, n in c.items()})
+            p = Counter({k: v for k, v in pb.items() if keep(k[0])})
+            g = Counter({k: v for k, v in gb.items() if keep(k[0])})
             inter = sum((p & g).values())
             tp[name] += inter
             fp[name] += sum(p.values()) - inter
             fn[name] += sum(g.values()) - inter
     out = {}
     for name in SLOT_GROUPS:
-        precision = tp[name] / (tp[name] + fp[name]) if tp[name] + fp[name] else None
-        recall = tp[name] / (tp[name] + fn[name]) if tp[name] + fn[name] else None
-        f1 = (
-            2 * precision * recall / (precision + recall)
-            if precision and recall
-            else (0.0 if precision is not None else None)
-        )
-        out[name] = {
-            "p": precision,
-            "r": recall,
-            "f1": f1,
-            "tp": tp[name],
-            "fp": fp[name],
-            "fn": fn[name],
-        }
+        P = tp[name] / (tp[name] + fp[name]) if tp[name] + fp[name] else None
+        R = tp[name] / (tp[name] + fn[name]) if tp[name] + fn[name] else None
+        F = 2 * P * R / (P + R) if P and R else (0.0 if P is not None else None)
+        out[name] = {"p": P, "r": R, "f1": F, "tp": tp[name], "fp": fp[name], "fn": fn[name]}
     return out
 
 
-def _suborders(exr):
-    return Counter(sub[0] for sub in parse_exr(exr)[1])
+ERROR_KEYS = ("invalid", "wrong_number", "hallucinated_entity", "missing_entity",
+              "utts_with_hallucination", "extra_suborder", "missing_suborder",
+              "merged_suborder")
 
 
-def structural_errors(preds_exr, golds_exr):
-    """Suborder count errors and leaf entities that are not in the gold tree."""
-    extra = missing = 0
-    halluc_entity = halluc_number = 0
-    total_pred_leaves = total_gold_numbers = 0
-    utt_with_halluc = 0
+def error_counts(preds_exr, golds_exr):
+    c = Counter({k: 0 for k in ERROR_KEYS})
+    n = len(golds_exr)
     for pred, gold in zip(preds_exr, golds_exr):
         if pred is None:
+            c["invalid"] += 1
             continue
-        p, g = _suborders(pred), _suborders(gold)
-        for ctor in set(p) | set(g):
-            diff = p[ctor] - g[ctor]
-            extra += max(diff, 0)
-            missing += max(-diff, 0)
-        pbags, gbags = slot_bags(pred), slot_bags(gold)
-        flat = lambda bags: Counter(
-            {(k, v): n for k, c in bags.items() for v, n in c.items()}
-        )
-        pf, gf = flat(pbags), flat(gbags)
-        unmatched = pf - gf
-        total_pred_leaves += sum(pf.values())
-        numbers = sum(n for (k, _), n in unmatched.items() if k[0] == "NUMBER")
-        halluc_number += numbers
-        halluc_entity += sum(unmatched.values()) - numbers
-        total_gold_numbers += sum(n for (k, _), n in gf.items() if k[0] == "NUMBER")
-        if unmatched:
-            utt_with_halluc += 1
-    n = len(golds_exr)
-    return {
-        "extra_suborders": extra / n,
-        "missing_suborders": missing / n,
-        "hallucinated_entities_per_utt": halluc_entity / n,
-        "hallucinated_numbers_per_utt": halluc_number / n,
-        "utts_with_hallucination": utt_with_halluc / n,
-        "hallucination_rate_of_pred_leaves": (
-            (halluc_entity + halluc_number) / total_pred_leaves
-            if total_pred_leaves
-            else None
-        ),
-    }
+        pb, gb = leaf_bag(pred), leaf_bag(gold)
+        extra, missing = pb - gb, gb - pb
+        c["wrong_number"] += sum(v for k, v in extra.items() if k[0][0] == "NUMBER")
+        c["hallucinated_entity"] += sum(v for k, v in extra.items() if k[0][0] != "NUMBER")
+        c["missing_entity"] += sum(missing.values())
+        c["utts_with_hallucination"] += bool(extra)
+        ps, gs = suborder_count(pred), suborder_count(gold)
+        c["extra_suborder"] += max(ps - gs, 0)
+        c["missing_suborder"] += max(gs - ps, 0)
+        gold_non_number = Counter({k: v for k, v in gb.items() if k[0][0] != "NUMBER"})
+        if ps < gs and not (gold_non_number - pb):
+            c["merged_suborder"] += 1
+    return {k: v / n for k, v in c.items()} | {f"{k}_total": v for k, v in c.items()}
 
 
-def evaluate(outputs, golds_exr, fmt, pcfg_err_flags=None):
-    preds = [to_exr_or_none(o, fmt) for o in outputs]
+def evaluate(outputs, golds_exr, arm, pcfg_err=None, n_tokens=None, cap=None):
+    preds = [to_exr_or_none(o, arm) for o in outputs]
     em = [bool(p) and exact_match(p, g) for p, g in zip(preds, golds_exr)]
     n = len(golds_exr)
-    result = {
+    n_valid = sum(p is not None for p in preds)
+    res = {
         "n": n,
         "em": sum(em) / n,
-        "parse_validity": sum(p is not None for p in preds) / n,
+        "parse_validity": n_valid / n,
+        # Accuracy among outputs that parsed at all. Separates "cannot emit a well-formed
+        # tree" from "misunderstood the utterance", which a pilot showed is the whole story.
+        "em_given_valid": (sum(em) / n_valid) if n_valid else None,
         "prf": prf(preds, golds_exr),
-        **structural_errors(preds, golds_exr),
+        **error_counts(preds, golds_exr),
     }
-    if pcfg_err_flags is not None:
-        idx = [i for i, f in enumerate(pcfg_err_flags) if f]
-        result["em_pcfg_err"] = sum(em[i] for i in idx) / len(idx) if idx else None
-        result["n_pcfg_err"] = len(idx)
-    return result, preds
+    if n_tokens is not None:
+        res["mean_generated_tokens"] = sum(n_tokens) / n
+        res["max_generated_tokens"] = max(n_tokens)
+        if cap:
+            res["hit_cap_rate"] = sum(t >= cap for t in n_tokens) / n
+    if pcfg_err is not None:
+        idx = [i for i, f in enumerate(pcfg_err) if f]
+        res["em_pcfg_err"] = sum(em[i] for i in idx) / len(idx) if idx else None
+        res["n_pcfg_err"] = len(idx)
+    return res, preds, em

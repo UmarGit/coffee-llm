@@ -1,0 +1,25 @@
+# Server connection for push_code.sh, fetch_runs.sh and the Makefile.
+#
+#   cp server.conf.example server.conf     then edit
+#
+# server.conf is git-ignored so each person keeps their own. Environment variables
+# still win, so a one-off override works without editing anything:
+#
+#   HOST=user-9@10.32.15.91 make push
+#
+# These are shell assignments; quote anything containing spaces.
+
+# user@host of the GPU machine
+HOST="user-8@10.32.15.90"
+
+# ssh port
+PORT="2235"
+
+# private key used for that host
+KEY="$HOME/.ssh/custodian_ed25519"
+
+# path to the repo on the server, relative to the remote home directory
+REMOTE="experiments"
+
+# how many GPUs to shard across; `auto` uses every GPU the machine reports
+GPUS="auto"

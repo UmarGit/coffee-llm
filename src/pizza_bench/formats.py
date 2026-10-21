@@ -260,8 +260,31 @@ def from_json(text):
 
 # ---------- dispatch ----------
 
-ENCODERS = {"exr": to_exr, "dsl": to_dsl, "json": to_json}
-DECODERS = {"exr": parse_exr, "dsl": from_dsl, "json": from_json}
+def _ladder():
+    from . import ladder
+    return ladder
+
+
+ARMS = ("exr", "json", "exr_short", "tagged", "dsl", "words")
+LADDER_ARMS = ("exr", "exr_short", "tagged", "dsl")
+MATCHED_PAIRS = (("exr", "json"), ("dsl", "words"))
+
+ENCODERS = {
+    "exr": to_exr,
+    "json": to_json,
+    "dsl": to_dsl,
+    "exr_short": lambda n: _ladder().to_exr_short(n),
+    "tagged": lambda n: _ladder().to_tagged(n),
+    "words": lambda n: _ladder().to_words(n),
+}
+DECODERS = {
+    "exr": parse_exr,
+    "json": from_json,
+    "dsl": from_dsl,
+    "exr_short": lambda t: _ladder().from_exr_short(t),
+    "tagged": lambda t: _ladder().from_tagged(t),
+    "words": lambda t: _ladder().from_words(t),
+}
 
 
 def encode(node, fmt):

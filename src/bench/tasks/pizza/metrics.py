@@ -25,12 +25,11 @@ are loaded with utils/ on sys.path and their output is captured.
 import contextlib
 import io
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
 from .formats import PIZZA_DIR, decode, parse_exr, to_exr
-
 
 
 @lru_cache(maxsize=1)

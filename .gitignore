@@ -15,7 +15,7 @@ models/
 data/external/
 data/pizza/
 pizza-runs/
-runs/
+runs*/
 reports/
 adapters/
 adapter/

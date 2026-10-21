@@ -10,21 +10,37 @@ the dataset's original sibling order. See PROTOCOL.md section 3 for why these ex
     words      10.3          pizza 2 medium extra cheese tuna      (matched control for dsl)
     json       45.6                                                 (matched control for exr)
 """
+
 import re
 
-from .formats import (
-    BARE, SUBORDER_TAG, TAG_SUBORDER, catalog, parse_exr, to_exr,
-)
+from .formats import catalog
 
 CTOR_SHORT = {
-    "ORDER": "O", "PIZZAORDER": "P", "DRINKORDER": "D", "NUMBER": "N", "SIZE": "S",
-    "TOPPING": "T", "STYLE": "Y", "NOT": "X", "COMPLEX_TOPPING": "C", "QUANTITY": "Q",
-    "DRINKTYPE": "K", "CONTAINERTYPE": "R", "VOLUME": "V",
+    "ORDER": "O",
+    "PIZZAORDER": "P",
+    "DRINKORDER": "D",
+    "NUMBER": "N",
+    "SIZE": "S",
+    "TOPPING": "T",
+    "STYLE": "Y",
+    "NOT": "X",
+    "COMPLEX_TOPPING": "C",
+    "QUANTITY": "Q",
+    "DRINKTYPE": "K",
+    "CONTAINERTYPE": "R",
+    "VOLUME": "V",
 }
 SHORT_CTOR = {v: k for k, v in CTOR_SHORT.items()}
 
-TAG_OF = {"TOPPING": "topp", "SIZE": "size", "STYLE": "style", "DRINKTYPE": "drink",
-          "CONTAINERTYPE": "cont", "NUMBER": "n", "VOLUME": "vol"}
+TAG_OF = {
+    "TOPPING": "topp",
+    "SIZE": "size",
+    "STYLE": "style",
+    "DRINKTYPE": "drink",
+    "CONTAINERTYPE": "cont",
+    "NUMBER": "n",
+    "VOLUME": "vol",
+}
 CTOR_OF_TAG = {v: k for k, v in TAG_OF.items()}
 QUANTITY_WORD = {"EXTRA": "extra", "LIGHT": "light"}
 WORD_QUANTITY = {v: k for k, v in QUANTITY_WORD.items()}
@@ -34,6 +50,7 @@ _TOK_SHORT = re.compile("([()])")
 
 
 # ---------- exr_short: same s-expression, one-letter constructors, no padding ----------
+
 
 def to_exr_short(node):
     if isinstance(node, str):
@@ -75,6 +92,7 @@ def from_exr_short(text):
 
 # ---------- tagged: flat key=value attributes ----------
 
+
 def _tagged_attr(node):
     ctor, kids = node
     if ctor == "NUMBER":
@@ -94,7 +112,8 @@ def to_tagged(node):
     return " ; ".join(
         ("pizza" if sub[0] == "PIZZAORDER" else "drink")
         + "".join(" " + _tagged_attr(a) for a in sub[1])
-        for sub in node[1])
+        for sub in node[1]
+    )
 
 
 def _tagged_attr_back(token):
@@ -102,8 +121,10 @@ def _tagged_attr_back(token):
         return ("NOT", [_tagged_attr_back(token[3:])])
     key, _, value = token.partition("=")
     if key in WORD_QUANTITY:
-        return ("COMPLEX_TOPPING", [("QUANTITY", [WORD_QUANTITY[key]]),
-                                    ("TOPPING", [value.upper()])])
+        return (
+            "COMPLEX_TOPPING",
+            [("QUANTITY", [WORD_QUANTITY[key]]), ("TOPPING", [value.upper()])],
+        )
     if key == "vol":
         m = _VOL_JOINED.match(value)
         if not m:
@@ -130,6 +151,7 @@ def from_tagged(text):
 
 # ---------- words: dsl structure, spelled out, no sigils ----------
 
+
 def _words_attr(node):
     ctor, kids = node
     if ctor == "NUMBER":
@@ -151,7 +173,8 @@ def to_words(node):
     return " ; ".join(
         ("pizza" if sub[0] == "PIZZAORDER" else "drink")
         + "".join(" " + _words_attr(a) for a in sub[1])
-        for sub in node[1])
+        for sub in node[1]
+    )
 
 
 _VOL_UNITS = {"ml", "oz", "floz", "liter"}
@@ -164,8 +187,10 @@ def _words_attr_back(toks, i, cat):
         inner, j = _words_attr_back(toks, i + 1, cat)
         return ("NOT", [inner]), j
     if t in WORD_QUANTITY:
-        return ("COMPLEX_TOPPING", [("QUANTITY", [WORD_QUANTITY[t]]),
-                                    ("TOPPING", [toks[i + 1].upper()])]), i + 2
+        return (
+            "COMPLEX_TOPPING",
+            [("QUANTITY", [WORD_QUANTITY[t]]), ("TOPPING", [toks[i + 1].upper()])],
+        ), i + 2
     if t == "style":
         return ("STYLE", [toks[i + 1].upper()]), i + 2
     if t[0].isdigit() and i + 1 < len(toks) and toks[i + 1] in _VOL_UNITS:

@@ -49,8 +49,12 @@ SSH=(ssh -i "$KEY" -p "$PORT")
 
 # Explicit allow list. Safer than excluding, because a new large directory in the repo
 # cannot accidentally start being uploaded.
-SEND=(src scripts tests PROTOCOL.md pyproject.toml README.md)
+# Makefile is in here deliberately: it is the documented entry point on the
+# server, so leaving it out meant `make push` could never update the commands
+# people actually type, and the server silently ran an older recipe.
+SEND=(src scripts tests Makefile PROTOCOL.md pyproject.toml README.md)
 [ -f "$REPO/uv.lock" ] && SEND+=(uv.lock)
+[ -f "$REPO/TASK.md" ] && SEND+=(TASK.md)
 
 cd "$REPO"
 MISSING=()
@@ -82,8 +86,8 @@ printf '%s\n' "$LIST" | tar czf - -T - | "${SSH[@]}" "$HOST" "tar xzf - -C \$HOM
 echo
 echo "=== verifying on the server ==="
 "${SSH[@]}" "$HOST" "cd \$HOME/$REMOTE && echo \"  PROTOCOL.md: \$(wc -l < PROTOCOL.md) lines\" && \
-  echo \"  pizza_bench modules: \$(ls src/pizza_bench/*.py | wc -l)\" && \
-  grep -E '^ +(max_steps|min_steps|patience):' src/pizza_bench/config.py | sed 's/^/  /' && \
+  echo \"  bench modules: \$(ls src/bench/*.py src/bench/tasks/*/*.py | wc -l)\" && \
+  grep -E '^ +(max_steps|min_steps|patience):' src/bench/config.py | sed 's/^/  /' && \
   echo \"  runs/ untouched: \$(ls -d runs 2>/dev/null || echo 'absent')\""
 echo
 echo "Next on the server: make prepare && make check && make smoke"

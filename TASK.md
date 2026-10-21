@@ -14,21 +14,23 @@ make push
 ```
 
 ```bash
-# on the server
+# on the server: one command per (model, task), end to end
 uv sync --group gpu --extra pizza
-make prepare                       # clone PIZZA, compute max_new_tokens per arm
-make check                         # stop here if it fails
-make smoke                         # n=200, 100 steps, under 10 minutes
 
-./scripts/tmux.sh sweep 3          # LR sweep at n=100k
-./scripts/tmux.sh select           # pick LRs once every shard is done
-./scripts/tmux.sh grid 3           # the 90 cells
-./scripts/tmux.sh latency 3        # sharded, not a single session
-./scripts/tmux.sh single determinism test grammar fewshot report
+./scripts/tmux.sh all qwen pizza 3     # the headline grid
+./scripts/tmux.sh all lfm2 pizza 3     # the tokenizer replication
+./scripts/tmux.sh all qwen coffee 3    # the cafe task
 
-./scripts/tmux.sh status           # progress
-./scripts/tmux.sh tail             # follow every shard log
+./scripts/tmux.sh status               # what is alive
+tmux attach -t bench-all-qwen-pizza    # watch one (ctrl-b d to detach)
 ```
+
+Each `all` runs prepare, check, smoke, the sharded sweep, the learning-rate
+selection, the sharded grid, sharded latency, then determinism, test, fewshot,
+grammar and report, in that order, joining between stages. It stops at `check`
+if a gate fails. Everything is resumable, so re-running after a crash costs only
+what did not finish. Results land in `runs/<model>/<task>/` and logs in
+`runs/<model>/<task>/logs/`.
 
 ## 2. Rebuild the paper from the new runs
 

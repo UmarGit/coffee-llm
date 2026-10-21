@@ -4,7 +4,7 @@ llama.cpp supports `grammar`; Ollama's API only takes JSON schemas, so grammar-c
 decoding runs through llama.cpp / llama-cpp-python.
 """
 
-from .formats import BARE, catalog
+from .formats import catalog
 
 
 def _alts(words):

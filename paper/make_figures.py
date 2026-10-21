@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from pizza_bench import report
+from bench import report
 
 OUT = REPO / "paper" / "figures"
 sys.path.insert(0, str(Path(__file__).resolve().parent))

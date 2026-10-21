@@ -12,7 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from pizza_bench import evaluate, report
+from bench import evaluate, report
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from palette import LABEL, MACRO, latex_colors
 

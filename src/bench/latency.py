@@ -1,20 +1,24 @@
 """Batch-size-1 latency on the training GPU.
 
-Resumable: each run appends to runs/latency_gpu.jsonl as it finishes, and run ids already
-present are skipped. The Mac measurement lives in scripts/pizza_latency_mac.py.
+Resumable: each run appends to runs/<model>/<task>/latency_gpu.jsonl as it
+finishes, and ids already present are skipped.
+
+This is a server figure, measured on a contended GPU. The number that describes
+what a customer waits for comes from the iPad client's own benchmark instead.
 """
+
 import json
 import os
 import statistics
 import time
-from pathlib import Path
 
 from . import evaluate
-from .config import BASE_MODEL, RUNS, run_dir
+from .config import model as active_model
+from .config import model_task_dir, run_dir
 
 
 def results_path():
-    return RUNS / "latency_gpu.jsonl"
+    return model_task_dir() / "latency_gpu.jsonl"
 
 
 def done_run_ids():
@@ -36,6 +40,7 @@ def append_result(row):
     so take an exclusive lock and repair a missing newline before writing."""
     import fcntl
     import os
+
     p = results_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(row) + "\n"
@@ -69,9 +74,13 @@ def load_adapter(adapter_dir, max_seq_length=640, use_unsloth=True):
     if use_unsloth:
         try:
             from unsloth import FastLanguageModel
+
             model, tok = FastLanguageModel.from_pretrained(
-                model_name=str(adapter_dir), max_seq_length=max_seq_length,
-                load_in_4bit=False, load_in_16bit=True)
+                model_name=str(adapter_dir),
+                max_seq_length=max_seq_length,
+                load_in_4bit=False,
+                load_in_16bit=True,
+            )
             if hasattr(FastLanguageModel, "for_inference"):
                 FastLanguageModel.for_inference(model)
             assert_adapter_active(model, adapter_dir)
@@ -81,13 +90,19 @@ def load_adapter(adapter_dir, max_seq_length=640, use_unsloth=True):
 
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    dtype = torch.bfloat16 if (torch.cuda.is_available()
-                               and torch.cuda.is_bf16_supported()) else torch.float32
-    base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=dtype)
+
+    dtype = (
+        torch.bfloat16
+        if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        else torch.float32
+    )
+    base = AutoModelForCausalLM.from_pretrained(active_model().hf_id, dtype=dtype)
     model = PeftModel.from_pretrained(base, str(adapter_dir))
     model = model.to("cuda" if torch.cuda.is_available() else "cpu")
     assert_adapter_active(model, adapter_dir)
-    return model, normalize_tokenizer(AutoTokenizer.from_pretrained(BASE_MODEL))
+    return model, normalize_tokenizer(
+        AutoTokenizer.from_pretrained(active_model().hf_id)
+    )
 
 
 def assert_adapter_active(model, adapter_dir):
@@ -105,7 +120,8 @@ def assert_adapter_active(model, adapter_dir):
             f"adapter at {adapter_dir} loaded but all {seen} lora_B tensors are zero, so "
             f"the trained weights are not active and this would time the base model. If "
             f"PEFT printed 'missing adapter keys' above, the saver and loader disagree "
-            f"about module naming; load with the same framework that saved it.")
+            f"about module naming; load with the same framework that saved it."
+        )
     return {"lora_layers": seen, "nonzero_lora_B": nonzero}
 
 
@@ -117,19 +133,33 @@ def gpu_context():
     """
     import subprocess
     import torch
+
     if not torch.cuda.is_available():
         return {"device": "cpu"}
-    out = {"device": torch.cuda.get_device_name(0),
-           "visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES")}
+    out = {
+        "device": torch.cuda.get_device_name(0),
+        "visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+    }
     try:
-        used, total = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=memory.used,memory.total",
-             "--format=csv,noheader,nounits"], stderr=subprocess.DEVNULL
-        ).decode().strip().splitlines()[0].split(",")
+        used, total = (
+            subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=memory.used,memory.total",
+                    "--format=csv,noheader,nounits",
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+            .splitlines()[0]
+            .split(",")
+        )
         out["gpu_memory_used_mib"] = int(used)
         out["gpu_memory_total_mib"] = int(total)
         out["gpu_memory_used_by_this_process_mib"] = round(
-            torch.cuda.memory_reserved() / 1024 / 1024)
+            torch.cuda.memory_reserved() / 1024 / 1024
+        )
     except Exception:
         pass
     return out
@@ -138,6 +168,7 @@ def gpu_context():
 def measure(model, tok, rows, arm, cap, warmup=5):
     """Batch size 1, one utterance at a time, so this is a deployment latency."""
     import torch
+
     for r in rows[:warmup]:
         evaluate.generate(model, tok, [r["src"]], cap, batch_size=1)
     times, counts, outs = [], [], []
@@ -151,14 +182,23 @@ def measure(model, tok, rows, arm, cap, warmup=5):
         outs.append(texts[0])
     s = sorted(times)
     hit_cap = sum(c >= cap for c in counts) / len(counts)
-    return {
-        "arm": arm, "n": len(rows), "batch_size": 1, "max_new_tokens": cap,
-        "median_ms": statistics.median(s), "p90_ms": s[int(len(s) * 0.9)],
-        "mean_ms": statistics.fmean(s),
-        "mean_generated_tokens": statistics.fmean(counts),
-        "hit_cap_rate": hit_cap,
-        "tokens_per_second": statistics.fmean(counts) / (statistics.fmean(s) / 1000),
-    }, outs, counts
+    return (
+        {
+            "arm": arm,
+            "n": len(rows),
+            "batch_size": 1,
+            "max_new_tokens": cap,
+            "median_ms": statistics.median(s),
+            "p90_ms": s[int(len(s) * 0.9)],
+            "mean_ms": statistics.fmean(s),
+            "mean_generated_tokens": statistics.fmean(counts),
+            "hit_cap_rate": hit_cap,
+            "tokens_per_second": statistics.fmean(counts)
+            / (statistics.fmean(s) / 1000),
+        },
+        outs,
+        counts,
+    )
 
 
 def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
@@ -177,21 +217,31 @@ def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
         if not adapter.is_dir():
             print(f"  skip {rid}: no adapter saved")
             continue
-        model, tok = load_adapter(adapter, max_seq_length=cfg.max_seq_length,
-                                  use_unsloth=use_unsloth)
+        model, tok = load_adapter(
+            adapter, max_seq_length=cfg.max_seq_length, use_unsloth=use_unsloth
+        )
         res, outs, _ = measure(model, tok, rows, arm, cap)
         acc, _, _ = metrics.evaluate(outs, [r["exr"] for r in rows], arm)
-        res.update(run_id=rid, split=split, em=acc["em"],
-                   parse_validity=acc["parse_validity"], **gpu_context())
+        res.update(
+            run_id=rid,
+            split=split,
+            em=acc["em"],
+            parse_validity=acc["parse_validity"],
+            **gpu_context(),
+        )
         if res["hit_cap_rate"] > 0.5:
             raise RuntimeError(
                 f"{rid}: {res['hit_cap_rate']:.0%} of generations reached the {cap}-token "
                 f"cap and validity is {acc['parse_validity']:.2f}. That is the signature of "
-                f"an inactive adapter, not a slow model. Refusing to record this.")
+                f"an inactive adapter, not a slow model. Refusing to record this."
+            )
         append_result(res)
         out.append(res)
-        print(f"  {rid}: median {res['median_ms']:.0f} ms, "
-              f"{res['mean_generated_tokens']:.1f} tokens, EM {acc['em']:.3f}", flush=True)
+        print(
+            f"  {rid}: median {res['median_ms']:.0f} ms, "
+            f"{res['mean_generated_tokens']:.1f} tokens, EM {acc['em']:.3f}",
+            flush=True,
+        )
         del model
         torch.cuda.empty_cache()
     return out

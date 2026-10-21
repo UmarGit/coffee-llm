@@ -16,7 +16,9 @@ import os
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+# src/bench/tasks/pizza/formats.py -> repo root. Counted from this file's depth,
+# so moving the module without updating this is what breaks the data path.
+REPO = Path(__file__).resolve().parents[4]
 PIZZA_DIR = Path(os.environ.get("PIZZA_DIR", REPO / "data/external/pizza"))
 
 QUANTITY_SIGIL = {"EXTRA": "+", "LIGHT": "~"}
@@ -260,8 +262,10 @@ def from_json(text):
 
 # ---------- dispatch ----------
 
+
 def _ladder():
     from . import ladder
+
     return ladder
 
 

@@ -2,13 +2,18 @@ import json
 
 import pytest
 
-pizza = pytest.importorskip("pizza_bench")
-from pizza_bench import data, evaluate, formats, grammar, ladder, metrics
-from pizza_bench.config import EOS, PROMPT
+bench = pytest.importorskip("bench")
+from bench import config, evaluate
+from bench.tasks.pizza import data, formats, grammar, ladder, metrics
+
+config.select("qwen", "pizza")
+EOS = config.model().eos
+PROMPT = config.model().prompt
 
 pytestmark = pytest.mark.skipif(
     not (formats.PIZZA_DIR / "utils/catalogs").is_dir(),
-    reason="PIZZA dataset not cloned; run python -m pizza_bench prepare")
+    reason="PIZZA dataset not cloned; run python -m bench prepare",
+)
 
 TRAIN_SAMPLE = 50_000
 
@@ -65,19 +70,24 @@ def test_roundtrip_agrees_with_official_matcher(splits, arm):
 def test_ladder_is_ordered_by_length(splits):
     means = {}
     for arm in formats.ARMS:
-        texts = [formats.encode(formats.parse_exr(r["exr"]), arm) for r in splits["test"]]
+        texts = [
+            formats.encode(formats.parse_exr(r["exr"]), arm) for r in splits["test"]
+        ]
         means[arm] = sum(len(t) for t in texts) / len(texts)
     assert means["exr"] > means["exr_short"] > means["dsl"]
     assert means["tagged"] < means["exr_short"]
 
 
 def test_nested_not_over_complex_topping():
-    exr = ("(ORDER (PIZZAORDER (NOT (COMPLEX_TOPPING (QUANTITY EXTRA ) (TOPPING CHEESE ) ) ) "
-           "(NUMBER 1 ) ) )")
+    exr = (
+        "(ORDER (PIZZAORDER (NOT (COMPLEX_TOPPING (QUANTITY EXTRA ) (TOPPING CHEESE ) ) ) "
+        "(NUMBER 1 ) ) )"
+    )
     node = formats.parse_exr(exr)
     for arm in formats.ARMS:
-        assert formats.to_exr(formats.decode(formats.encode(node, arm), arm)) \
-            == formats.to_exr(node)
+        assert formats.to_exr(
+            formats.decode(formats.encode(node, arm), arm)
+        ) == formats.to_exr(node)
     assert formats.to_dsl(node) == "p !+cheese 1"
 
 
@@ -87,8 +97,9 @@ def test_volume_two_tokens():
     assert formats.to_dsl(node) == "d 1 20floz coke"
     assert ladder.to_words(node) == "drink 1 20 floz coke"
     for arm in formats.ARMS:
-        assert formats.to_exr(formats.decode(formats.encode(node, arm), arm)) \
-            == formats.to_exr(node)
+        assert formats.to_exr(
+            formats.decode(formats.encode(node, arm), arm)
+        ) == formats.to_exr(node)
 
 
 def test_decoders_reject_garbage():
@@ -101,7 +112,9 @@ def test_catalog_unambiguous():
     cat = formats.catalog()
     words = [e.lower() for ctor in formats.BARE for e in cat.ids[ctor]]
     assert len(words) == len(set(words))
-    assert not {"p", "d", "pizza", "drink", "no", "style", "extra", "light"} & set(words)
+    assert not {"p", "d", "pizza", "drink", "no", "style", "extra", "light"} & set(
+        words
+    )
 
 
 @pytest.mark.slow
@@ -129,7 +142,12 @@ def test_no_overlap_between_train_subsets_and_eval(splits):
             sub = data.train_subset(size, seed)
             for split in ("dev", "test"):
                 ov = data.overlap(sub, splits[split])
-                assert ov["exact"] == 0 and ov["normalized"] == 0, (size, seed, split, ov)
+                assert ov["exact"] == 0 and ov["normalized"] == 0, (
+                    size,
+                    seed,
+                    split,
+                    ov,
+                )
 
 
 def test_pcfg_error_subset_size(splits):
@@ -143,23 +161,35 @@ def test_metric_definitions():
     res, _, _ = metrics.evaluate([same], [gold], "dsl")
     assert res["em"] == 1.0 and res["hallucinated_entity"] == 0.0
 
-    wrong_n = formats.to_dsl(formats.parse_exr(
-        "(ORDER (PIZZAORDER (NUMBER 3 ) (TOPPING HAM ) ) )"))
+    wrong_n = formats.to_dsl(
+        formats.parse_exr("(ORDER (PIZZAORDER (NUMBER 3 ) (TOPPING HAM ) ) )")
+    )
     res, _, _ = metrics.evaluate([wrong_n], [gold], "dsl")
     assert res["wrong_number"] == 1.0 and res["hallucinated_entity"] == 0.0
 
-    invented = formats.to_dsl(formats.parse_exr(
-        "(ORDER (PIZZAORDER (NUMBER 2 ) (TOPPING HAM ) (TOPPING TUNA ) ) )"))
+    invented = formats.to_dsl(
+        formats.parse_exr(
+            "(ORDER (PIZZAORDER (NUMBER 2 ) (TOPPING HAM ) (TOPPING TUNA ) ) )"
+        )
+    )
     res, _, _ = metrics.evaluate([invented], [gold], "dsl")
     assert res["hallucinated_entity"] == 1.0 and res["wrong_number"] == 0.0
 
-    res, _, _ = metrics.evaluate(["p 1 (((", ], [gold], "dsl")
+    res, _, _ = metrics.evaluate(
+        [
+            "p 1 (((",
+        ],
+        [gold],
+        "dsl",
+    )
     assert res["parse_validity"] == 0.0 and res["em"] == 0.0
 
 
 def test_missing_and_merged_suborders():
-    gold = ("(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) "
-            "(PIZZAORDER (NUMBER 1 ) (TOPPING TUNA ) ) )")
+    gold = (
+        "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) "
+        "(PIZZAORDER (NUMBER 1 ) (TOPPING TUNA ) ) )"
+    )
     merged = "p 1 ham tuna"
     res, _, _ = metrics.evaluate([merged], [gold], "dsl")
     assert res["missing_suborder"] == 1.0
@@ -169,7 +199,8 @@ def test_missing_and_merged_suborders():
 def test_eos_is_a_real_token():
     pytest.importorskip("transformers")
     from transformers import AutoTokenizer
-    from pizza_bench.config import BASE_MODEL
+    from bench.config import BASE_MODEL
+
     tok = AutoTokenizer.from_pretrained(BASE_MODEL)
     eos_id = tok.convert_tokens_to_ids(EOS)
     assert eos_id is not None and eos_id != tok.unk_token_id
@@ -180,11 +211,12 @@ def test_caps_cover_every_gold_target():
     """max_new_tokens must never truncate a gold-length output."""
     pytest.importorskip("transformers")
     from transformers import AutoTokenizer
-    from pizza_bench.config import BASE_MODEL, load_caps
+    from bench.config import BASE_MODEL, load_caps
+
     try:
         caps = load_caps()
     except FileNotFoundError:
-        pytest.skip("run python -m pizza_bench prepare first")
+        pytest.skip("run python -m bench prepare first")
     tok = AutoTokenizer.from_pretrained(BASE_MODEL)
     rows = data.load("dev") + data.load("test")
     for arm in formats.ARMS:
@@ -201,8 +233,9 @@ def test_strip_eos():
 def test_score_file_recomputes_from_disk(tmp_path):
     rows = data.load("dev")[:20]
     outputs = [formats.to_dsl(formats.parse_exr(r["exr"])) for r in rows]
-    res, preds, em = metrics.evaluate(outputs, [r["exr"] for r in rows], "dsl",
-                                      n_tokens=[5] * len(rows))
+    res, preds, em = metrics.evaluate(
+        outputs, [r["exr"] for r in rows], "dsl", n_tokens=[5] * len(rows)
+    )
     path = tmp_path / "dev_predictions.jsonl"
     evaluate.write_predictions(path, rows, outputs, preds, em, [5] * len(rows))
     again, back = evaluate.score_file(path, "dsl")
@@ -220,6 +253,7 @@ def test_grammar_covers_the_dsl():
 
 class _FakeTok:
     """Minimal stand-in for a real tokenizer."""
+
     padding_side = "right"
     pad_token = None
     eos_token = "<|endoftext|>"
@@ -237,12 +271,13 @@ class _FakeTok:
 
 class _FakeProcessor:
     """What Unsloth hands back for some models: no tokenizer API of its own."""
+
     def __init__(self):
         self.tokenizer = _FakeTok()
 
 
 def test_normalize_tokenizer_unwraps_a_processor():
-    train = pytest.importorskip("pizza_bench.train")
+    train = pytest.importorskip("bench.train")
     tok = train.normalize_tokenizer(_FakeProcessor())
     assert isinstance(tok, _FakeTok)
     assert tok.padding_side == "left"
@@ -250,7 +285,7 @@ def test_normalize_tokenizer_unwraps_a_processor():
 
 
 def test_normalize_tokenizer_rejects_a_bad_eos():
-    train = pytest.importorskip("pizza_bench.train")
+    train = pytest.importorskip("bench.train")
 
     class NoEos(_FakeTok):
         def convert_tokens_to_ids(self, t):
@@ -268,7 +303,7 @@ def test_normalize_tokenizer_rejects_a_bad_eos():
 
 
 def test_normalize_tokenizer_rejects_a_non_tokenizer():
-    train = pytest.importorskip("pizza_bench.train")
+    train = pytest.importorskip("bench.train")
 
     class Useless:
         pass
@@ -283,10 +318,19 @@ def test_fewshot_prompt_is_chat_turns():
     A single user turn makes a chat-tuned base model reply in prose instead of the target
     format, which produced 0% parse validity across all six arms.
     """
-    from pizza_bench.__main__ import fewshot_prompt
-    shots = [{"src": "two cokes", "exr": "(ORDER (DRINKORDER (NUMBER 2 ) (DRINKTYPE COKE ) ) )"},
-             {"src": "one ham pizza", "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) )"}]
-    p = fewshot_prompt(shots, "dsl", "three sprites")
+    from bench.__main__ import fewshot_prompt
+
+    shots = [
+        {
+            "src": "two cokes",
+            "exr": "(ORDER (DRINKORDER (NUMBER 2 ) (DRINKTYPE COKE ) ) )",
+        },
+        {
+            "src": "one ham pizza",
+            "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) )",
+        },
+    ]
+    p = fewshot_prompt(shots, "dsl", "three sprites", PROMPT)
 
     assert p.count("<|im_start|>user") == 3
     assert p.count("<|im_start|>assistant") == 3
@@ -295,25 +339,34 @@ def test_fewshot_prompt_is_chat_turns():
     assert "p 1 ham" + EOS in p
     # the final turn is left open for the model to complete
     assert p.endswith("<think>\n\n</think>\n\n")
-    assert p.count(EOS) == 2 + 3   # two answers plus three user-turn terminators
+    assert p.count(EOS) == 2 + 3  # two answers plus three user-turn terminators
 
 
 def test_fewshot_prompt_uses_the_arm_format():
-    from pizza_bench.__main__ import fewshot_prompt
-    shots = [{"src": "one ham pizza", "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) )"}]
-    assert "p 1 ham" in fewshot_prompt(shots, "dsl", "x")
-    assert "pizza 1 ham" in fewshot_prompt(shots, "words", "x")
-    assert "(ORDER (PIZZAORDER" in fewshot_prompt(shots, "exr", "x")
+    from bench.__main__ import fewshot_prompt
+
+    shots = [
+        {
+            "src": "one ham pizza",
+            "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) )",
+        }
+    ]
+    assert "p 1 ham" in fewshot_prompt(shots, "dsl", "x", PROMPT)
+    assert "pizza 1 ham" in fewshot_prompt(shots, "words", "x", PROMPT)
+    assert "(ORDER (PIZZAORDER" in fewshot_prompt(shots, "exr", "x", PROMPT)
 
 
 def test_latency_resume_skips_measured_runs(tmp_path, monkeypatch):
-    from pizza_bench import config, latency
-    monkeypatch.setattr(config, "RUNS", tmp_path)
-    monkeypatch.setattr(latency, "RUNS", tmp_path)
+    from bench import config, latency
+
+    monkeypatch.setattr(latency, "model_task_dir", lambda: tmp_path)
     assert latency.done_run_ids() == set()
     latency.append_result({"run_id": "dsl-n20000-s0-lr0.0001", "median_ms": 12.0})
     latency.append_result({"run_id": "exr-n20000-s0-lr0.0001", "median_ms": 45.0})
-    assert latency.done_run_ids() == {"dsl-n20000-s0-lr0.0001", "exr-n20000-s0-lr0.0001"}
+    assert latency.done_run_ids() == {
+        "dsl-n20000-s0-lr0.0001",
+        "exr-n20000-s0-lr0.0001",
+    }
     # a truncated line from a crash must not lose the rest
     with open(latency.results_path(), "a") as f:
         f.write('{"run_id": "trunc"')
@@ -323,12 +376,13 @@ def test_latency_resume_skips_measured_runs(tmp_path, monkeypatch):
 
 def test_assert_adapter_active_rejects_an_unapplied_adapter():
     torch = pytest.importorskip("torch")
-    from pizza_bench import latency
+    from bench import latency
 
     class Fake:
         def __init__(self, vals):
-            self._p = [(f"base.layers.0.lora_B.default.weight", torch.tensor(v))
-                       for v in vals]
+            self._p = [
+                (f"base.layers.0.lora_B.default.weight", torch.tensor(v)) for v in vals
+            ]
 
         def named_parameters(self):
             return iter(self._p)

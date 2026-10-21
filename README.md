@@ -94,7 +94,7 @@ Items separated by `;`, each one `drink [size] [milk] [syrup] [xN]`:
 `?` means *not an order, off-menu, or too vague*. It can appear on its own (`?`) or alongside
 recognised items (`капучино и круассан` → `cap;?`).
 
-The full vocabulary lives in [menu.py](src/coffee_parser/menu.py) and must stay in sync with
+The full vocabulary lives in [menu.py](src/bench/tasks/coffee/menu.py) and must stay in sync with
 the dataset generator.
 
 ### Setup
@@ -117,14 +117,14 @@ ollama create coffee -f ollama/Modelfile
 Ollama enables thinking by default. Two ways to avoid it:
 
 - `"raw": true` with the exact training prompt, which is what
-  [ollama.py](src/coffee_parser/ollama.py) does.
+  [ollama.py](src/bench/tasks/coffee/ollama.py) does.
 - `"think": false` on a normal templated call. Identical output and token counts, and it is
   what `ollama run coffee --think=false "…"` does.
 
 Use the client rather than rolling your own call:
 
 ```python
-from coffee_parser import generate, to_json
+from bench.tasks.coffee import generate, to_json
 
 out, ms, tokens = generate("латте на овсяном и маленький американо")
 # 'lat oat;ame S'
@@ -161,19 +161,25 @@ with the stray closer in `response` rather than parsed out.
 
 ### Eval and benchmark
 
+The eval set is 49 hand-written cases in
+[testset.py](src/bench/tasks/coffee/testset.py), written separately from the training
+generator and including slang the generator never produces (`флэтик`, `капучиночку`) to
+test generalisation. Current: **48/49 (98%)**.
+
+Two ways to measure the model, each on the path it actually describes:
+
 ```bash
-uv run python scripts/coffee_eval.py     # accuracy, one pass, prints every failure
-uv run python scripts/benchmark.py       # latency, three passes, median and p90
+python -m bench test --task coffee     # the training path, on a GPU
 ```
 
-The eval set (49 hand-written cases in [testset.py](src/coffee_parser/testset.py)) was
-written separately from the training generator and includes slang the generator never
-produces (`флэтик`, `капучиночку`) to test generalisation. Current: **48/49 (98%)**.
+and the **Бенчмарк** button in the iPad app for the shipped GGUF, which is the only
+measurement that describes what a customer waits for. See
+[On-device deployment](#on-device-deployment).
 
 ### Training
 
 Training produces a Q8_0 GGUF, published to `umarsheikh303/coffee-parser-gguf`. The dataset
-generator is [generator.py](src/coffee_parser/generator.py); `production_dataset()`
+generator is [generator.py](src/bench/tasks/coffee/generator.py); `production_dataset()`
 reproduces exactly the 4000 examples this model was trained on, pinned by a test against a
 frozen copy of the original inline code.
 
@@ -246,7 +252,7 @@ That isolation is what produced the result: the matched pair, not the ladder, is
 surface form rather than length is driving it.
 
 All six round-trip to byte-identical EXR on all of dev, all of test and a 50,000 row train
-sample, checked by `python -m pizza_bench check` and by the test suite.
+sample, checked by `python -m bench check` and by the test suite.
 
 ### What the axes mean
 
@@ -272,11 +278,10 @@ make push                  # send code to the server (tar over ssh, no rsync nee
 # on the server
 uv sync --group gpu --extra pizza
 make prepare && make check && make smoke
-./scripts/tmux.sh sweep 3  # learning rate sweep, sharded across GPUs
-./scripts/tmux.sh select   # choose learning rates once the shards finish
-./scripts/tmux.sh grid 3
-./scripts/tmux.sh latency 3        # sharded too, not a single session
-./scripts/tmux.sh single determinism test grammar fewshot report
+# every stage for one model and task, in order, in one session
+./scripts/tmux.sh all qwen pizza 3
+./scripts/tmux.sh all lfm2 pizza 3     # the tokenizer replication
+./scripts/tmux.sh all qwen coffee 3    # the cafe task
 
 make fetch                 # back on the Mac: pull runs/, adapters skipped
 make paper                 # rebuild figures, tables and paper.pdf
@@ -293,18 +298,21 @@ follows every shard log, and `stop` kills them all.
 
 The stages, individually:
 
+Every stage takes `--model qwen|lfm2` and `--task pizza|coffee`, defaulting to
+`qwen pizza`, and writes to `runs/<model>/<task>/`:
+
 ```bash
-python -m pizza_bench prepare      # clone data, compute max_new_tokens per arm
-python -m pizza_bench check        # round-trip, overlap, cap coverage, EOS id, environment
-python -m pizza_bench smoke        # n=200, 100 steps, full pipeline, under 10 minutes
-python -m pizza_bench sweep        # LR per arm at n=100k, seeds 0, 1, 2
-python -m pizza_bench grid         # 6 arms x 5 pool sizes x 3 seeds
-python -m pizza_bench determinism  # one cell retrained, to size the noise floor
-python -m pizza_bench test         # aggregation only, nothing is retrained
-python -m pizza_bench grammar      # constrained decoding comparison
-python -m pizza_bench fewshot      # no-finetune reference
-python -m pizza_bench latency      # batch size 1, sharded across GPUs
-python -m pizza_bench report       # tables, figures, summary.md
+python -m bench prepare      # fetch data, compute max_new_tokens per arm
+python -m bench check        # round-trip, overlap, cap coverage, EOS id, environment
+python -m bench smoke        # n=200, 100 steps, full pipeline, under 10 minutes
+python -m bench sweep        # LR per arm at n=100k, seeds 0, 1, 2
+python -m bench grid         # 6 arms x 5 pool sizes x 3 seeds
+python -m bench determinism  # one cell retrained, to size the noise floor
+python -m bench test         # aggregation only, nothing is retrained
+python -m bench grammar      # constrained decoding comparison
+python -m bench fewshot      # no-finetune reference
+python -m bench latency      # batch size 1, sharded across GPUs
+python -m bench report       # tables, figures, summary.md
 ```
 
 `max_new_tokens` is computed per arm as the longest target across train, dev and test times
@@ -313,8 +321,10 @@ python -m pizza_bench report       # tables, figures, summary.md
 and warns above 1%.
 
 The server has no `rsync`, so both transfer scripts use tar over ssh, needing only `ssh`,
-`tar` and `gzip`. `push_code.sh` sends an explicit allow list and never touches `runs/` or
-`data/` on the server. Both take `--list` to show what would move without moving it.
+`tar` and `gzip`. `push_code.sh` sends an explicit allow list (`src`, `scripts`, `tests`,
+`Makefile`, `PROTOCOL.md`, `TASK.md`, `pyproject.toml`, `README.md`, `uv.lock`) and never
+touches `runs/` or `data/` on the server. Both take `--list` to show what would move
+without moving it.
 
 ### Experimental design
 
@@ -368,7 +378,7 @@ Each run writes a self-contained `runs/<run_id>/` with `config.json`, `env.json`
 `metrics.json`, `curves.json`, `dev_predictions.jsonl`, `test_predictions.jsonl` and
 `adapter/`. Prediction rows carry the source, gold, raw model output, parsed EXR, a
 correctness flag and the generated token count, so **every reported number is recomputable
-from disk with `python -m pizza_bench report`, without a GPU and without regenerating**.
+from disk with `python -m bench report`, without a GPU and without regenerating**.
 
 `make paper` rebuilds every figure and table from `runs/`. No number in the paper is typed by
 hand, apart from the on-device table, which is marked as projected until a device run
@@ -383,14 +393,21 @@ Makefile             one entry point; `make help` and `make help-server`
 PROTOCOL.md          pre-registered protocol, written before any run
 server.conf.example  GPU server connection settings; copy to server.conf
 paper/               LaTeX source, figure and table generators, palette
-src/coffee_parser/   production parser: menu, parsing, ollama client, testset, generator
-src/pizza_bench/     the study: config, data, formats, ladder, metrics, train, evaluate,
-                     grammar, latency, report, __main__ (the CLI)
-scripts/             tmux.sh, push_code.sh, fetch_runs.sh, coffee_eval.py,
-                     benchmark.py, pizza_latency_mac.py
+src/bench/           one harness, two registries, nothing model- or task-specific
+  models.py          MODELS: every model-specific fact, one entry per model
+  tasks/__init__.py  TASKS: every task-specific fact, loaded lazily
+  tasks/pizza/       6 arms, EXR trees, the dataset's own matcher (CC-BY-NC)
+  tasks/coffee/      the shipped parser and the cafe task together:
+                     menu, generator, testset, parsing, ollama client, 2 arms.
+                     Standard library only, and importing it never imports a
+                     line of PIZZA code, both asserted by the test suite.
+  config.py          selection, run layout, token caps, chosen learning rates
+  train.py evaluate.py latency.py report.py __main__.py
+scripts/             tmux.sh, run_all.sh (the runner), push_code.sh, fetch_runs.sh
 tests/               pytest suite; data/ holds the frozen generator reference
 ollama/              Modelfile
 models/              weights, git-ignored
 data/external/       PIZZA dataset, git-ignored (CC-BY-NC-4.0)
-runs/, reports/      PIZZA run artifacts, git-ignored
+runs/<model>/<task>/  run artifacts, git-ignored
+reports/<model>/<task>/  generated tables, git-ignored
 ```

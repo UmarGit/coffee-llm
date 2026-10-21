@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from coffee_parser import generator as g
-from coffee_parser.parsing import parse_compact
+from bench.tasks.coffee import generator as g
+from bench.tasks.coffee.parsing import parse_compact
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -40,7 +40,7 @@ def test_generate_unique_is_unique_and_excludes():
 
 
 def test_splits_are_disjoint():
-    from coffee_parser.testset import TEST_SET
+    from bench.tasks.coffee.testset import TEST_SET
     hand = {t for t, _ in TEST_SET}
     train = g.generate_unique(800, seed=101, exclude=hand)
     seen = hand | {e["input"] for e in train}

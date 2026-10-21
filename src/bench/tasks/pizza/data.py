@@ -8,6 +8,7 @@ axis varies only in how much of the same distribution is drawn.
 The full pool is read straight from its zip, never extracted: 2.46M lines stream in about
 five seconds using 17 MiB, against 1.44 GB on disk if unpacked.
 """
+
 import json
 import random
 import re
@@ -22,7 +23,9 @@ POOLS = {
     "10pct": ("PIZZA_train.10_percent.json.zip", "PIZZA_train.10_percent.json"),
 }
 DEFAULT_POOL = "full"
-PROMPT = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+PROMPT = (
+    "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+)
 
 
 def data_dir():
@@ -33,7 +36,9 @@ def _row(d, prefix):
     return {
         "src": d[f"{prefix}.SRC"],
         "exr": d[f"{prefix}.EXR"],
-        "pcfg_err": d.get(f"{prefix}.PCFG_ERR") == "True" if prefix != "train" else None,
+        "pcfg_err": d.get(f"{prefix}.PCFG_ERR") == "True"
+        if prefix != "train"
+        else None,
     }
 
 
@@ -48,10 +53,10 @@ def _open_pool(pool):
     zpath = data_dir() / archive
     if not zpath.exists():
         raise FileNotFoundError(
-            f"neither {plain} nor {zpath} exists; run `python -m pizza_bench prepare`")
-    with zipfile.ZipFile(zpath) as z:
-        with z.open(member) as f:
-            yield from f
+            f"neither {plain} nor {zpath} exists; run `python -m bench prepare`"
+        )
+    with zipfile.ZipFile(zpath) as z, z.open(member) as f:
+        yield from f
 
 
 def _cache_path(pool, kind):
@@ -192,11 +197,16 @@ def overlap(train_rows, eval_rows):
     """Exact and normalised source overlap between a training subset and an eval split."""
     te, tn = {r["src"] for r in train_rows}, {_norm(r["src"]) for r in train_rows}
     ee, en = {r["src"] for r in eval_rows}, {_norm(r["src"]) for r in eval_rows}
-    return {"n_train": len(train_rows), "n_eval": len(eval_rows),
-            "exact": len(te & ee), "normalized": len(tn & en)}
+    return {
+        "n_train": len(train_rows),
+        "n_eval": len(eval_rows),
+        "exact": len(te & ee),
+        "normalized": len(tn & en),
+    }
 
 
 def duplicate_sources(rows):
     from collections import Counter
+
     c = Counter(r["src"] for r in rows)
     return sum(v - 1 for v in c.values() if v > 1)

@@ -1,10 +1,11 @@
 # Frozen copy of the inline generator from coffee_order_finetune.ipynb as it stood when
 # the production v2 model was trained. Do not edit: tests assert that
-# coffee_parser.generator.production_dataset() still reproduces this exactly.
+# bench.tasks.coffee.generator.production_dataset() still reproduces this exactly.
 import random
 random.seed(42)
 
-# code -> spoken variants. Codes must match coffee_eval.py
+# code -> spoken variants. Codes must match the menu in
+# src/bench/tasks/coffee/menu.py
 # (флэтик and капучиночку are deliberately left out: the test set checks generalization)
 DRINKS = {
   "cap": {"ru":["капучино","капуччино","капучина","капчино","капучинку","капучинка"], "en":["cappuccino","capuccino","cappuccinos"]},

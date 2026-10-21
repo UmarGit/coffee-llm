@@ -28,19 +28,19 @@ measured with the Qwen3.5 tokenizer on the test split.
 
 ### Ladder (primary, spans the achievable length range)
 
-| arm | mean tokens | example |
-|---|---|---|
-| `exr` | 45.0 | `(ORDER (PIZZAORDER (NUMBER 2 ) (SIZE MEDIUM ) ... ) )` |
-| `exr_short` | 33.4 | `(O (P (N 2) (S MEDIUM) ...))` |
-| `tagged` | 21.9 | `pizza n=2 size=medium extra=cheese topp=tuna` |
-| `dsl` | 10.8 | `p 2 medium +cheese tuna` |
+| arm         | mean tokens | example                                                 |
+| ----------- | ----------- | ------------------------------------------------------- |
+| `exr`       | 45.0        | `(ORDER (PIZZAORDER (NUMBER 2 ) (SIZE MEDIUM ) ... ) )` |
+| `exr_short` | 33.4        | `(O (P (N 2) (S MEDIUM) ...))`                          |
+| `tagged`    | 21.9        | `pizza n=2 size=medium extra=cheese topp=tuna`          |
+| `dsl`       | 10.8        | `p 2 medium +cheese tuna`                               |
 
 ### Matched-token controls (secondary, test the confound)
 
-| pair | tokens | holds constant | varies |
-|---|---|---|---|
-| `exr` vs `json` | 45.0 vs 45.6 | length | syntax family |
-| `dsl` vs `words` | 10.8 vs 10.3 | length | sigils vs words |
+| pair             | tokens       | holds constant | varies          |
+| ---------------- | ------------ | -------------- | --------------- |
+| `exr` vs `json`  | 45.0 vs 45.6 | length         | syntax family   |
+| `dsl` vs `words` | 10.8 vs 10.3 | length         | sigils vs words |
 
 If a matched pair differs significantly, format family has an effect independent of length,
 and any length-based claim must be qualified accordingly.
@@ -172,7 +172,7 @@ Any of these will be reported as the headline result if observed.
 Every run writes `runs/<run_id>/` containing `config.json`, `env.json`, `metrics.json`,
 `curves.json`, `dev_predictions.jsonl`, `test_predictions.jsonl` and `adapter/`. Every number
 in the report is recomputable from the saved predictions with
-`python -m pizza_bench report`, without a GPU and without rerunning generation.
+`python -m bench report`, without a GPU and without rerunning generation.
 
 ## 12. Determinism
 
@@ -180,7 +180,7 @@ One configuration (`dsl`, n=20000, seed 0, chosen LR) is trained a second time w
 identical configuration and a different run tag. The absolute difference in test EM between
 the two replicates is the floor on any difference this study can resolve. Differences between
 arms smaller than that floor are reported as indistinguishable from rerun noise. The number
-is produced by `python -m pizza_bench determinism` and written to `runs/determinism.json`.
+is produced by `python -m bench determinism` and written to `runs/determinism.json`.
 
 ## 13. Note on what the metric is measuring
 

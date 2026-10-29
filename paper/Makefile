@@ -6,11 +6,13 @@ all: figures tables paper.pdf
 
 figures:
 	$(PY) make_figures.py
+	$(PY) make_tokenization.py
 
 tables:
 	$(PY) make_tables.py
 
-paper.pdf: paper.tex generated/macros.tex generated/main_table.tex
+paper.pdf: paper.tex generated/macros.tex generated/main_table.tex \
+          generated/tokenization_macros.tex figures/tokenization.pdf
 	latexmk -pdf -interaction=nonstopmode -halt-on-error paper.tex
 
 check: paper.pdf

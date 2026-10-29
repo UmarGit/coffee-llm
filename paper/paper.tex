@@ -21,6 +21,11 @@
 
 \input{generated/colors}
 \input{generated/macros}
+\input{generated/replication_macros}
+\input{generated/tokenization_macros}
+% The cafe grid is written only once it is complete, so the section below either
+% has real numbers or does not exist. No placeholder can reach the PDF.
+\IfFileExists{generated/coffee_macros.tex}{\input{generated/coffee_macros}}{}
 
 % --- on-device numbers -------------------------------------------------------
 % MEASURED on an iPad (A16) running iOS 26.3.1 by the client's own benchmark:
@@ -55,11 +60,11 @@ in Real Time Order Parsing}
 
 \author{
 \IEEEauthorblockN{Umar Ahmed}
-\IEEEauthorblockA{\textit{Independent Researcher}\\
+\IEEEauthorblockA{\textit{ITMO University}\\
 uakhmed@itmo.ru}
 \and
 \IEEEauthorblockN{Maxim Duanev}
-\IEEEauthorblockA{\textit{Independent Researcher}\\
+\IEEEauthorblockA{\textit{ITMO University}\\
 mduanev@itmo.ru}
 }
 
@@ -75,16 +80,19 @@ target tree, arranged as a ladder from \exrTok{} down to \wordsTok{} tokens per
 utterance, with two matched token pairs that hold length fixed while varying
 surface form. Across \nRuns{} runs we find that shortening the output does
 \emph{not} by itself improve accuracy: at 1000 training examples every ten tokens
-removed costs about four points of exact match. What matters is whether the
+removed costs about \slopeEmSmall{} points of exact match. What matters is whether the
 surface form is made of natural words. A word based encoding matches the native
 s-expression on accuracy (\wordsEm{} versus \exrEm{}, inside a measured rerun
 noise floor of \noiseFloor{}) while using \tokRatio{}$\times$ fewer tokens,
 running \speedup{}$\times$ faster at batch size one, producing
 \hallRatio{}$\times$ fewer hallucinated entities, and halving the rate of errors
 that parse cleanly but are wrong. We argue this last quantity, which we call the
-\emph{silent error rate}, is the right objective for deploying small models, and
-we report a café ordering system that runs at 80\,ms per order on a consumer
-laptop.
+\emph{silent error rate}, is the right objective for deploying small models. The
+matched-pair result replicates on \replLabel{}, whose vocabulary is four times
+smaller, where the word based encoding costs \emph{more} tokens than its
+symbolic twin and is still the more accurate of the two. We report a café
+ordering system built on the finding that runs at 80\,ms per order on a
+consumer laptop.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -95,8 +103,8 @@ semantic parsing, small language models, hallucination, LoRA, output formats
 
 A small language model is attractive for a narrow task. It fine tunes in minutes,
 runs on a laptop, and costs almost nothing per call. The objection is
-reliability: small models hallucinate, and in a structured output setting a
-hallucination is not an obviously broken string. It is a well formed tree
+reliability: small models hallucinate~\cite{hallucination}, and in a structured
+output setting a hallucination is not an obviously broken string. It is a well formed tree
 describing an order nobody placed.
 
 This distinction matters more than overall accuracy. An output that fails to
@@ -121,8 +129,9 @@ this with matched token controls that separate length from form.
 (1) A ladder of six lossless encodings of the PIZZA target tree spanning
 \exrTok{} to \wordsTok{} tokens, with matched token pairs that isolate length
 from surface form.
-(2) Evidence that length alone is not the mechanism, from twelve paired
-comparisons that all separate.
+(2) Evidence that length alone is not the mechanism, from \pairdslWordsTotal{}
+paired comparisons at equal token budget, all \pairdslWordsSep{} of which
+separate in the same direction.
 (3) The silent error rate as a deployment objective, with a word based encoding
 halving it relative to the native format.
 (4) A measured rerun noise floor of \noiseFloor{} exact match, which bounds
@@ -149,6 +158,63 @@ what any three seed comparison on this task can claim.
 trained to emit.}
 \label{fig:pipeline}
 \end{figure}
+
+\section{Related Work}
+
+\paragraph{Target representation choice.}
+That the choice of meaning representation affects a model's accuracy is not new.
+Dong and Lapata~\cite{donglapata} already found that decoding logical forms as
+trees rather than flat sequences changed results, and Shin
+\emph{et al.}~\cite{shin} made the point closest to ours: prompting a language
+model to produce a \emph{canonical natural-language form}, which a grammar then
+maps to the meaning representation, beats prompting it for the meaning
+representation directly. Our finding is the same phenomenon in a different
+regime, and we try to pin down its mechanism. Shin \emph{et al.} work few-shot,
+with a frozen model and constrained decoding, where one plausible explanation is
+simply that natural-looking strings sit closer to the pretraining distribution a
+frozen model can only be steered towards. We fine tune, so the model is given the
+chance to learn whatever notation we ask for, and the effect persists. We also
+hold token count fixed across a matched pair, which separates naturalness from
+length, and we replicate across two subword vocabularies.
+
+\paragraph{Does imposing a format cost accuracy?}
+Tam \emph{et al.}~\cite{tam} ask a question adjacent to ours and reach a
+compatible answer: restricting a model to JSON, especially through constrained
+decoding, degrades performance relative to free-form generation, and not mainly
+through parse failures. Read together with our results, the lesson is not that
+structure is harmful but that \emph{notation} is the cost. We never relax the
+requirement that output be machine parseable; we vary only how it is spelled, and
+recover much of the gap at no cost in parseability.
+
+\paragraph{Constrained decoding.}
+A large body of work makes invalid output impossible rather than unlikely, by
+masking the token distribution against a grammar or automaton:
+PICARD~\cite{picard} for SQL, grammar-constrained decoding for structured NLP
+tasks generally~\cite{gcd}, and efficient vocabulary indexing to make the mask
+cheap~\cite{outlines}. This is complementary to what we study and partly
+orthogonal to it. Constrained decoding can drive parse validity to one, which
+converts our detectable failures into something else, but it cannot make a
+well-formed tree correct. The silent error rate we measure is exactly the part of
+the problem constrained decoding does not address, and the format comparison
+remains live underneath it: we ship a grammar for the task and report the
+unconstrained numbers, because an arm's unconstrained validity is itself
+diagnostic of how well the model has internalised the notation.
+
+\paragraph{Hallucination.}
+Surveys of hallucination in generation~\cite{hallucination} largely treat it as a
+faithfulness problem in open-ended text, where the judgement of what is invented
+is itself a modelling problem. A closed-schema parsing task makes the question
+decidable: an entity in the output that is absent from the input and from the
+schema is invented, and can be counted. We use that to report hallucination as a
+rate per utterance rather than as a human judgement.
+
+\paragraph{Tokenization.}
+Subword segmentation~\cite{bpe} determines how many tokens a string costs, and
+vocabulary fit is known to move downstream accuracy, not just
+sequence length~\cite{tokenizer}. Our tokenizer-floor measurement is a narrow
+instance: shortening a string stops shortening its token sequence once the string
+leaves the vocabulary, which is why our ladder has a floor at about ten tokens,
+and why the same format costs different amounts on two different vocabularies.
 
 \section{Task and System}
 
@@ -181,10 +247,13 @@ general we moved to a public benchmark.
 \subsection{PIZZA}
 
 PIZZA~\cite{pizza} is a semantic parsing dataset of spoken pizza and drink
-orders paired with executable target trees. We use the public 10\% training pool
-of 245{,}645 utterances, the 348 utterance development split and the \nTest{}
-utterance test split, of which \nPcfg{} are marked as failures of the authors'
-PCFG baseline. Targets look like:
+orders paired with executable target trees. We use the full published training
+pool of \publishedTrainN{} utterances, the 348 utterance development split and
+the \nTest{} utterance test split, of which \nPcfg{} are marked as failures of
+the authors' PCFG baseline. Our largest training size is \nHeadline{}: the pool
+less \publishedGap{} rows whose source and target are identical to an evaluation
+utterance. Those rows are dropped from training rather than from the evaluation
+splits, so the splits remain exactly as published. Targets look like:
 
 \begin{center}
 \footnotesize\ttfamily
@@ -193,8 +262,10 @@ PCFG baseline. Targets look like:
 (QUANTITY EXTRA ) (TOPPING CHEESE ) ) ) )
 \end{center}
 
-We verified that no development or test utterance appears in the training pool,
-exactly or after normalisation, at any training size or seed.
+We verified that no development or test utterance appears in any training subset
+we draw, exactly or after normalisation, at any training size or seed. The check
+is on the subsets rather than on the pool because the pool itself is not clean:
+it is what turns up the \publishedGap{} rows above.
 
 \section{Output Format Ladder}
 
@@ -242,20 +313,60 @@ utterance and on a 50{,}000 example training sample, checked against the
 dataset's own matcher.
 
 \paragraph{A tokenizer floor.}
-We also built a seventh encoding using short opaque entity codes, for example
-\code{p !p5 2 m3 +c2}. It has 16.4 characters per utterance against the DSL's
-34.9, less than half, but \emph{more} tokens, 11.9 against 10.8, because codes
-outside the subword vocabulary fragment. Shortening the string stops reducing
-tokens well before the information content does. This is why no arm sits below
-roughly ten tokens.
+Characters are not tokens, and the gap between them is where the ladder bottoms
+out. Figure~\ref{fig:tok} shows one real test utterance, \emph{``\exUtterance{}''},
+in all six encodings, with every box a subword produced by the model's own
+vocabulary and merge table.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/tokenization}
+\caption{The same order in all six encodings. Top: one box per token, all rows to
+one scale. Bottom: the matched pair with each box as wide as the characters it
+holds. \fmt{WORDS} is \exWordsCh{} characters against \fmt{DSL}'s \exDslCh{},
+nearly half as long again, and still costs fewer tokens (\exWordsTok{} against
+\exDslTok{}), because \code{+cheese} splits into three subwords while
+\code{extra cheese} stays whole. Boundaries are read from the tokenizer's own
+merge table, not drawn.}
+\label{fig:tok}
+\end{figure}
+
+The bottom row is the floor in miniature. \fmt{DSL} spends three tokens on
+\code{+cheese}, since \code{+} is isolated and \code{cheese} after a sigil is
+split, where \fmt{WORDS} spends two on \code{extra cheese}. The symbolic form is
+shorter as text and longer as tokens. We also built a seventh encoding using
+short opaque entity codes, for example \code{p !p5 2 m3 +c2}, which takes the
+same effect to its limit: 16.4 characters per utterance against the \fmt{DSL}'s
+34.9, less than half, but \emph{more} tokens, 11.9 against 10.8. Shortening the
+string stops reducing tokens well before the information content does, which is
+why no arm sits below roughly ten tokens and why we did not pursue that arm.
+
+The floor is a property of the subword vocabulary~\cite{bpe,tokenizer}, not of
+the format, and the second model measures that directly. Moving from \primaryLabel{}'s \primaryVocab{}
+subwords to \replLabel{}'s \replVocab{} costs every arm more tokens, but not
+equally: \fmt{JSON} inflates by \infljson{}$\times$ and \fmt{EXR} by
+\inflexr{}$\times$, while \fmt{DSL} inflates by \infldsl{}$\times$ and
+\fmt{WORDS} by \inflwords{}$\times$. Punctuation-heavy structure is what a
+small vocabulary punishes; ordinary words are what it already contains.
 
 \section{Experimental Setup}
 
-Identical across all arms: Qwen3.5-0.8B, LoRA with $r{=}16$, $\alpha{=}16$ on all
-attention and MLP projections, batch 16, cosine schedule, loss on the completion
-only. The prompt is the same template the café model uses. Learning rate is
-selected per arm from $\{1\mathrm{e}{-4}, 2\mathrm{e}{-4}, 5\mathrm{e}{-4}\}$ on
-development exact match at $n{=}20{,}000$ across three seeds, then frozen.
+Identical across all arms: LoRA~\cite{lora} with $r{=}16$, $\alpha{=}16$, batch 16, cosine
+schedule, loss on the completion only. Learning rate is selected per arm from
+$\{1\mathrm{e}{-4}, 2\mathrm{e}{-4}, 5\mathrm{e}{-4}\}$ on development exact
+match at $n{=}\nLrSelect{}$ across three seeds, then frozen.
+
+The primary model is \primaryLabel{}~\cite{qwen}, with adapters on all attention and MLP
+projections and the same prompt template the café model uses. The replication
+model is \replLabel{}~\cite{lfm}; Section~\ref{sec:replication} reports it. Three things
+about it necessarily differ and we state them rather than implying a matched
+setup: ten of its sixteen blocks are convolutional, so there is no equivalent of
+an explicit attention projection list and we let the adapter library target every
+linear layer, which also reaches the convolution blocks; its prompt comes from its
+own chat template, which does not prefill a closed reasoning block as the Qwen
+template does; and its token caps are computed separately, because a cap is a
+property of the tokenizer. Each model has its own learning-rate sweep, its own
+caps and its own noise floor, and the two never share a run directory.
 Training uses early stopping on development exact match with patience 10,
 evaluated every 100 steps, to a maximum of 4000 steps.
 
@@ -267,17 +378,43 @@ Development drives every decision. Test is evaluated once per run and never read
 by any selection step. Exact match always comes from the dataset's own unordered
 matcher, which we never reimplement.
 
+\paragraph{Metrics.}
+Write the test utterances $u_1 \dots u_n$ with gold trees $g_i$, and let $o_i$ be
+the model's output and $\pi$ the dataset's parser, with $\pi(o)=\bot$ when $o$ is
+not well formed. Let $\simeq$ be the dataset's own unordered tree match. We
+report
+\begin{align*}
+V &= \tfrac{1}{n}\,\bigl|\{\,i : \pi(o_i) \neq \bot\,\}\bigr|
+ &&\text{(parse validity)}\\
+A &= \tfrac{1}{n}\,\bigl|\{\,i : \pi(o_i) \simeq g_i\,\}\bigr|
+ &&\text{(exact match)}
+\end{align*}
+and split the failures into the two kinds the introduction distinguishes:
+\begin{equation*}
+\underbrace{A}_{\text{correct}} \;+\;
+\underbrace{S}_{\text{silent}} \;+\;
+\underbrace{D}_{\text{detectable}} \;=\; 1,
+\qquad S = V - A,\quad D = 1 - V .
+\end{equation*}
+$S$ is the \emph{silent error rate}: output a caller parses successfully and acts
+on, that is wrong. $D$ is the share a caller can reject on sight. Figure~\ref{fig:errors}
+plots this decomposition for every arm. Note that $A$ alone orders the arms
+differently from $S$, which is the practical point: an arm can win on validity
+and lose on the errors that actually reach a customer.
+
 \paragraph{Noise floor.}
-We retrained one configuration twice under identical settings. Test exact match
-differed by \noiseFloor{}. Any difference smaller than this is indistinguishable
-from rerun variance, and we do not interpret such differences.
+We retrained one configuration twice under identical settings, per model. Test
+exact match differed by \primaryNoise{} on \primaryLabel{} and \replNoise{} on
+\replLabel{}. Any difference smaller than the relevant floor is
+indistinguishable from rerun variance, and we do not interpret such differences.
 
 \section{Results}
 \label{sec:results}
 
 \begin{table*}[t]
 \centering
-\caption{Test results at $n{=}20{,}000$, mean of three seeds. Silent error is
+\caption{Test results for \primaryLabel{} at $n{=}\nHeadline{}$, mean of three
+seeds. Silent error is
 the share of utterances that parse cleanly but do not match the gold tree: the
 caller cannot detect these. Latency is median at batch size one on a shared GPU,
 and memory is this process's own GPU allocation during that measurement.}
@@ -300,21 +437,24 @@ Length alone does not determine accuracy.}
 Table~\ref{tab:main} and Figure~\ref{fig:acc} show no monotone benefit from
 shortening. Regressing exact match on mean generated tokens across the four
 ladder arms gives a \emph{positive} slope at both training sizes: at $n{=}1000$,
-removing ten tokens costs about four points of exact match. \fmt{EXR-short}, the
-most aggressive structural compression, is the worst arm at \exrShortEm{}, with
-parse validity of only \exrShortValid{}. Our original hypothesis, stated as
-``fewer output tokens is better,'' is falsified.
+removing ten tokens costs about \slopeEmSmall{} points of exact match.
+Compression costs accuracy at both ends of the ladder. \fmt{EXR-short}, which
+only renames the native format's constructors, gives up \exrShortDrop{} exact
+match against \fmt{EXR} for a quarter of its length, and the worst arm overall is
+\fmt{\worstArm{}} at \worstArmEm{}, one of the two shortest. Our original
+hypothesis, stated as ``fewer output tokens is better,'' is falsified.
 
 \subsection{Surface form, not length}
 
-The matched token pairs separate the two explanations, and all twelve
-comparisons separate under a paired bootstrap over the \nTest{} test utterances.
+The matched token pairs separate the two explanations, under a paired bootstrap
+over the \nTest{} test utterances at every pool size and seed. The two pairs do
+not behave alike, and the difference between them is the result.
 
 \begin{table}[t]
 \centering
-\caption{Matched token pairs at $n{=}20{,}000$. Paired bootstrap over test
-utterances. Equal length, different surface form, consistently different
-accuracy.}
+\caption{Matched token pairs at $n{=}\nHeadline{}$, the headline size only;
+the counts quoted in the text are over all \nSizes{} sizes. Paired bootstrap over
+test utterances. Equal length, different surface form.}
 \label{tab:matched}
 \scriptsize
 \setlength{\tabcolsep}{3.5pt}
@@ -322,9 +462,106 @@ accuracy.}
 \end{table}
 
 \fmt{DSL} and \fmt{WORDS} differ by less than a token in length, yet \fmt{WORDS}
-wins every seed. The two encode the same structure; they differ only in whether
-a quantity marker is written \code{+cheese} or \code{extra cheese}. Symbolic
-surface forms cost accuracy that natural word forms do not.
+is ahead in all \pairdslWordsFavB{} of \pairdslWordsTotal{} cells and separates
+from the noise in \pairdslWordsSep{} of them. The two encode the same structure;
+they differ only in whether a quantity marker is written \code{+cheese} or
+\code{extra cheese}. Symbolic surface forms cost accuracy that natural word forms
+do not.
+
+The \fmt{EXR}/\fmt{JSON} pair is the weaker half of the evidence and we report it
+as such. \fmt{EXR} is ahead in \pairexrJsonFavA{} of
+\pairexrJsonTotal{} cells, so the direction is consistent, but only
+\pairexrJsonSep{} of them clear the noise floor. That is the expected pattern rather than a disappointment:
+both members of this pair are punctuation-heavy symbolic notations, differing in
+which brackets they use, so there is little of the natural-word axis between them
+to measure. The pair that varies that axis is the pair that separates everywhere.
+
+\subsection{Replication on a second model}
+\label{sec:replication}
+
+The result above is the one that carries the argument, so it is the one worth
+trying to break. The obvious way it could be an artifact is the tokenizer: if
+\fmt{WORDS} wins because the Qwen vocabulary happens to contain the words this
+task uses, a model built on a different vocabulary should behave differently. We
+therefore repeated the whole grid on \replLabel{}, whose vocabulary is
+\replVocab{} against \primaryLabel{}'s \primaryVocab{}, a factor of nearly
+four, and whose architecture is largely convolutional rather than attentional.
+
+\begin{table}[h]
+\centering
+\caption{Mean output tokens and test exact match at $n{=}\nHeadline{}$, three
+seeds, best arm in bold. The two models are not comparable on absolute score and
+are not compared on it; what replicates is the ordering.}
+\label{tab:replication}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{generated/replication}
+\end{table}
+
+Three things survive the change of model. The best arm is \replBestArm{} again.
+The matched pair keeps both its sign and its size: \fmt{WORDS} over \fmt{DSL}
+by \primaryPairGap{} on \primaryLabel{} and \replPairGap{} on \replLabel{},
+against rerun noise floors of \primaryNoise{} and \replNoise{}. And the ladder
+is non-monotone on both, so the length story fails in the same way twice.
+
+The sign of the token difference is what makes this more than a repetition. Under
+\primaryLabel{}, \fmt{WORDS} is marginally the shorter of the pair
+(\primaryWordsTok{} against \primaryDslTok{} tokens), so a sceptic can still
+attribute its advantage to length. Under \replLabel{} the smaller vocabulary
+fragments the word forms more and the ordering inverts: \fmt{WORDS} costs
+\replWordsTok{} tokens against \fmt{DSL}'s \replDslTok{}, and it is
+\emph{still} the more accurate of the two, by \replPairGap{}. A format that
+uses more tokens and makes fewer mistakes cannot be winning because it is short.
+
+We draw no conclusion from the gap between the two models' absolute scores. They
+differ in parameter count, in architecture, in which modules carry adapters, and
+in whether the prompt prefills a closed reasoning block; any of those could
+account for it, and the design separates none of them. The replication is of the
+ordering, which is what the ladder and the matched pairs were built to isolate.
+
+\IfFileExists{generated/coffee.tex}{%
+\subsection{The café task does not resolve the question}
+\label{sec:coffee-results}
+
+The café parser was run as the same comparison on a different task, in Russian
+and English rather than English alone, and on the system in production. It has
+two arms rather than six, so it contributes no ladder and no slope: \fmt{compact}
+is the shipped format and \fmt{words} spells the same fields out, and they
+round-trip to byte-identical output. It did not replicate the format effect, and
+it could not have: the task is saturated.
+
+\begin{table}[h]
+\centering
+\caption{Café task at $n{=}\coffeeHead{}$, three seeds, on the \coffeeN{} case
+held-out set. No arm is marked best, because none separates.}
+\label{tab:coffee}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{generated/coffee}
+\end{table}
+
+Every cell of the grid, across both arms and all four pool sizes, falls between
+\coffeeEmMin{} and \coffeeEmMax{} exact match. With \coffeeN{} held-out cases one
+utterance is worth \coffeeResolution{} points, so the instrument cannot see
+anything smaller than that, and the \coffeePairGap{} between the two arms at the
+headline size is about a third of one case. All \coffeePairsTotal{} matched pairs
+fall inside the paired bootstrap interval, and the determinism replicate puts the
+run-to-run floor at \coffeeNoise{}, which is one case exactly. The honest reading
+is that at this size the café set measures a resolution limit rather than a
+format difference, in either direction.
+
+We report it rather than dropping it for two reasons. It is the negative result
+that bounds the claim: the effect the earlier sections measure is a few points,
+and a few points is invisible to a fifty case set, so anyone who evaluates a
+production parser on a hand-written suite of this size will see nothing and
+should not conclude there is nothing. And it does establish that the shipped
+format works, at \coffeeCompactLat{}\,ms per order against \coffeeWordsLat{}\,ms
+for the longer one, on the same task the device measurements in
+Section~\ref{sec:coffee} were taken from. Settling the format question on café
+orders needs a larger and harder held-out set, drawn from real transcripts rather
+than written by hand; that set does not exist yet.
+
+}{}
 
 \subsection{Silent errors}
 
@@ -385,7 +622,7 @@ is largest when data is scarce, and narrows as data grows.}
 
 Figure~\ref{fig:data} shows the format penalty is a low data phenomenon. At
 $n{=}1000$, \fmt{DSL} reaches \dslEmSmall{} against \fmt{WORDS} at
-\wordsEmSmall{}. By $n{=}20{,}000$ the gap narrows. A format closer to natural
+\wordsEmSmall{}. By $n{=}\nHeadline{}$ the gap narrows. A format closer to natural
 language appears to let the model reuse what pretraining already gave it, which
 matters most when there is little task data to learn from.
 
@@ -457,9 +694,16 @@ trip, and no per-request cost. The whole parser is a 795\,MiB file beside an
 \subsection{Reproducibility}
 
 Every number in this paper is recomputed from saved model outputs rather than
-copied from a training log. Each of the \nRuns{} runs writes its configuration,
-package versions, training curves, adapter weights and the full prediction file
-for both evaluation splits. A prediction row carries the source utterance, the
+copied from a training log. Each model has its own grid of \nRuns{} runs under
+its own directory, so no token cap, learning rate or noise floor is ever shared
+between them. Each run writes its configuration, package versions, training
+curves, adapter weights and the full prediction file for both evaluation
+splits, together with the generation contract it used: padding side, stop token
+and id, vocabulary size and the resolved prompt. We record the last of these
+because an earlier replication grid was run with right padding, which places
+pad tokens between the prompt and the continuation, and scored between 0.13 and
+0.20 lower on every arm; those runs were discarded and rerun, and the arm
+ordering was unaffected. A prediction row carries the source utterance, the
 gold tree, the raw model output, the parsed tree or a null, a correctness flag
 and the generated token count, so exact match can be recomputed offline with no
 GPU. Every table and figure here is produced by two scripts that read only those
@@ -470,28 +714,63 @@ amendments.
 \section{Discussion}
 
 \paragraph{Which format should a practitioner choose?}
-\fmt{WORDS}. It ties the native format on accuracy within the noise floor, and
-wins on every deployment axis: \tokRatio{}$\times$ fewer tokens,
+\fmt{WORDS}. On \primaryLabel{} it ties the native format on accuracy within the
+noise floor and wins on every deployment axis: \tokRatio{}$\times$ fewer tokens,
 \speedup{}$\times$ lower latency, \hallRatio{}$\times$ fewer hallucinations, and
-\silentRatio{}$\times$ fewer silent errors. The recipe is to compress the
+\silentRatio{}$\times$ fewer silent errors. It is also the best arm on
+\replLabel{}, by a margin outside that model's own noise floor, so the
+recommendation does not rest on one tokenizer. The recipe is to compress the
 \emph{structure} while keeping the \emph{vocabulary} natural.
 
-\paragraph{Can a small model do this at all?}
-At 20{,}000 training examples a 0.8B model reaches \exrEm{} exact match. The
-published BART-Large result on this benchmark is 0.786, but it used 2.46M
-training examples, 123 times more. We do not claim to beat it. The useful
-statement is that comparable accuracy is reachable at a small fraction of the
-data and at a model size that serves in real time on consumer hardware, which
-the café system in Section~\ref{sec:coffee} does at 80\,ms per order.
+\paragraph{How small can the model be?}
+At \nHeadline{} training examples \primaryLabel{} reaches \primaryWordsEm{}
+exact match on \fmt{WORDS}. \replLabel{}, less than half the parameters,
+reaches \replWordsEm{} on the same arm.
+
+This is now a like-for-like comparison on data, which earlier versions of this
+study could not make. The published \publishedSystem{} result on this benchmark
+is \publishedEm{}, trained on \publishedTrainN{} utterances; our headline grid
+trains on \nHeadline{}, the same pool less the \publishedGap{} rows that
+duplicate an evaluation utterance and that we drop as contamination. At that
+budget \primaryLabel{} is \headlineBeatsPublished{} ahead on its best arm. We
+still decline a state-of-the-art claim, but the reason is now narrower than it
+was: not the data budget, which is matched, but the architecture and training
+regime. \publishedSystem{} is a fully fine tuned encoder-decoder; this is a
+decoder-only model of a different size carrying LoRA adapters, and neither
+design was tuned to compete with the other. The number is a reference line, and
+what we read off it is only that a sub-billion-parameter model with adapters is
+in the same range as the published baseline once the format is chosen well.
+
+What is worth noting is the size of the format effect against the size of the
+model effect. Choosing the format moves exact match by \primaryArmSpread{} across
+the six arms on \primaryLabel{} and \replArmSpread{} on \replLabel{}, while the
+two models differ by \modelGapBest{} on their best arm. On the smaller model the
+format matters more than the choice of model; on the larger one the two effects
+are comparable. Either way, format is not a rounding error next to capacity.
+Both sizes serve in real time on consumer hardware, which the café system in
+Section~\ref{sec:coffee} does at 80\,ms per order.
 
 \paragraph{Limitations.}
-One task, one model, one tokenizer. The tokenizer floor is specific to this
-subword vocabulary. Three seeds per cell gives wide intervals, which is why
-arm comparisons use a paired bootstrap over utterances rather than seed means.
-Learning rate is tuned at $n{=}20{,}000$ and reused at $n{=}1000$. Latency is
+One task that resolves the question and two models, neither of them large. The
+replication in Section~\ref{sec:replication} shows the ordering survives a
+fourfold change of vocabulary, but both models are under a billion parameters and
+both grids are the same 1{,}357 utterance test split, so the finding is not
+established beyond this task.%
+% Guarded on the same file as the section itself: without the cafe grid the label
+% does not exist and the reference would render as a question mark.
+\IfFileExists{generated/coffee.tex}{ The second task we ran, in
+Section~\ref{sec:coffee-results}, was saturated and separates nothing in either
+direction; it bounds the claim rather than supporting it.}{} The replication was also added after the primary grid rather than
+pre-registered, and is reported as such. Three seeds per cell gives wide
+intervals, which is why arm comparisons use a paired bootstrap over utterances
+rather than seed means.
+Learning rate is tuned at $n{=}\nLrSelect{}$ and reused at every pool size. Latency is
 measured on a contended shared GPU, so absolute milliseconds are inflated,
 though every arm meets the same contention. We have not tested whether these
 findings transfer to a larger model, where the format penalty may vanish.
+Finally, the two models differ in capacity, architecture, adapter placement and
+prompt conditioning at once, so nothing here attributes any difference between
+their absolute scores to any one of those.
 
 \section{Conclusion}
 
@@ -499,14 +778,73 @@ Output format is a free design variable that changes hallucination rate and
 latency by factors of three to four. The intuition that fewer tokens is safer is
 not quite right. What helps is compressing structure while keeping the surface
 in natural words, and what matters for deployment is not overall accuracy but
-how often a model is wrong in a way nobody can detect.
+how often a model is wrong in a way nobody can detect. The ordering survives a
+fourfold change of subword vocabulary, and on the smaller vocabulary the word
+based format costs more tokens than its symbolic twin while remaining more
+accurate, which is the clearest evidence we have that the surface form and not
+the length is doing the work.
 
+% Balances the two columns on the final page, as IEEE style expects. It is also
+% the sole source of the one 1.26pt overfull vbox `make check` reports: the
+% balanced column lands that much proud of the text block. Commenting this line
+% out takes the count to zero and leaves the last page ragged. Measured, not
+% guessed; do not go hunting for a different cause.
 \balance
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
 \bibitem{pizza}
 K.~Arkoudas \emph{et al.}, ``PIZZA: A new benchmark for complex end-to-end
 task-oriented parsing,'' 2022. Dataset:
 \url{https://github.com/amazon-science/pizza-semantic-parsing-dataset}
+
+\bibitem{donglapata}
+L.~Dong and M.~Lapata, ``Language to logical form with neural attention,'' in
+\emph{Proc. ACL}, 2016, pp.~33--43.
+
+\bibitem{shin}
+R.~Shin \emph{et al.}, ``Constrained language models yield few-shot semantic
+parsers,'' in \emph{Proc. EMNLP}, 2021, pp.~7699--7715.
+
+\bibitem{tam}
+Z.~R.~Tam \emph{et al.}, ``Let me speak freely? A study on the impact of format
+restrictions on performance of large language models,'' in \emph{Proc. EMNLP
+Industry Track}, 2024, pp.~1218--1236.
+
+\bibitem{picard}
+T.~Scholak, N.~Schucher, and D.~Bahdanau, ``PICARD: Parsing incrementally for
+constrained auto-regressive decoding from language models,'' in \emph{Proc.
+EMNLP}, 2021, pp.~9895--9901.
+
+\bibitem{gcd}
+S.~Geng, M.~Josifoski, M.~Peyrard, and R.~West, ``Grammar-constrained decoding
+for structured NLP tasks without finetuning,'' in \emph{Proc. EMNLP}, 2023,
+pp.~10932--10952.
+
+\bibitem{outlines}
+B.~T.~Willard and R.~Louf, ``Efficient guided generation for large language
+models,'' arXiv:2307.09702, 2023.
+
+\bibitem{hallucination}
+Z.~Ji \emph{et al.}, ``Survey of hallucination in natural language generation,''
+\emph{ACM Comput. Surv.}, vol.~55, no.~12, art.~248, 2023.
+
+\bibitem{lora}
+E.~J.~Hu \emph{et al.}, ``LoRA: Low-rank adaptation of large language models,''
+arXiv:2106.09685, 2021.
+
+\bibitem{bpe}
+R.~Sennrich, B.~Haddow, and A.~Birch, ``Neural machine translation of rare words
+with subword units,'' in \emph{Proc. ACL}, 2016, pp.~1715--1725.
+
+\bibitem{tokenizer}
+P.~Rust, J.~Pfeiffer, I.~Vuli\'c, S.~Ruder, and I.~Gurevych, ``How good is your
+tokenizer? On the monolingual performance of multilingual language models,'' in
+\emph{Proc. ACL-IJCNLP}, 2021, pp.~3118--3135.
+
+\bibitem{qwen}
+Qwen Team, ``Qwen3 technical report,'' arXiv:2505.09388, 2025.
+
+\bibitem{lfm}
+A.~Amini \emph{et al.}, ``LFM2 technical report,'' arXiv:2511.23404, 2025.
 \end{thebibliography}
 
 \end{document}

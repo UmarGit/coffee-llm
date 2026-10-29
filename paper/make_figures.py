@@ -16,7 +16,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from bench import report
+from bench import config, report
+
+# The sizes come from the task rather than being pinned here, so a change to the
+# grid cannot leave the paper silently plotting a size that no longer exists.
+SIZES = config.Config.for_active().sizes
+SMALL, HEADLINE = SIZES[0], SIZES[-1]
 
 OUT = REPO / "paper" / "figures"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,7 +40,14 @@ COL_W = 3.35   # IEEEtran single column, inches
 FULL_W = 7.0
 
 
-def load(size=20000):
+def _tick(n):
+    """1000 -> 1k, 2456443 -> 2.5M, so five log ticks stay readable in one column."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M".replace(".0M", "M")
+    return f"{n // 1000}k"
+
+
+def load(size=HEADLINE):
     runs = [r for r in report.primary_runs() if r["size"] == size]
     by = defaultdict(list)
     for r in runs:
@@ -139,27 +151,33 @@ def fig_latency(by):
 
 
 def fig_data_efficiency():
-    small, big = load(1000), load(20000)
+    """Exact match against pool size, every size in the grid.
+
+    The axis is pool diversity at a fixed step budget, not amount of data trained
+    on: every run sees at most 64,000 samples, so above about 100k the extra rows
+    are never visited.
+    """
+    by_size = {n: load(n) for n in SIZES}
     fig, ax = plt.subplots(figsize=(COL_W, 2.3))
     for a in ARMS:
-        xs = [1000, 20000]
-        ys = [stat(small[a], "em"), stat(big[a], "em")]
-        ax.plot(xs, ys, marker="o", ms=4.5, lw=1.2, color=COLOR[a], label=LABEL[a])
-        ax.fill_between(xs,
-                        [ys[0] - sd(small[a], "em"), ys[1] - sd(big[a], "em")],
-                        [ys[0] + sd(small[a], "em"), ys[1] + sd(big[a], "em")],
+        xs = [n for n in SIZES if by_size[n].get(a)]
+        ys = [stat(by_size[n][a], "em") for n in xs]
+        es = [sd(by_size[n][a], "em") for n in xs]
+        ax.plot(xs, ys, marker="o", ms=4, lw=1.2, color=COLOR[a], label=LABEL[a])
+        ax.fill_between(xs, [y - e for y, e in zip(ys, es)],
+                        [y + e for y, e in zip(ys, es)],
                         color=COLOR[a], alpha=0.12, lw=0)
     ax.set_xscale("log")
-    ax.set_xticks([1000, 20000])
-    ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
-    ax.set_xlabel("training examples")
+    ax.set_xticks(list(SIZES))
+    ax.set_xticklabels([_tick(n) for n in SIZES])
+    ax.set_xlabel("pool size")
     ax.set_ylabel("exact match (test)")
     ax.legend(ncol=3, loc="lower right", handlelength=1.3, columnspacing=0.9)
     save(fig, "data_efficiency")
 
 
 if __name__ == "__main__":
-    by = load(20000)
+    by = load(HEADLINE)
     missing = [a for a in ARMS if not by.get(a)]
     if missing:
         sys.exit(f"no completed runs for {missing}; run the grid first")

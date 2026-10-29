@@ -1,0 +1,450 @@
+---
+import "../styles/site.css";
+import formats from "../../data/formats.json";
+import hero from "../../data/hero.json";
+import examples from "../../data/examples.json";
+import counts from "../../data/counts.qwen.json";
+import picked from "../../data/rounds.json";
+import model from "../../data/model.json";
+
+const REPO = "https://github.com/UmarGit/coffee-llm";
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+
+type Arm = { tokens: number; em: number; validity: number; silent: number; latencyMs: number };
+const qwen = formats.models.qwen as { label: string; arms: Record<string, Arm> };
+const lfm2 = formats.models.lfm2 as { label: string; arms: Record<string, Arm> };
+
+const ORDER = ["exr", "json", "exr_short", "tagged", "dsl", "words"] as const;
+const NAME: Record<string, string> = {
+  exr: "Brackets", json: "JSON", exr_short: "Short brackets",
+  tagged: "Tags", dsl: "Symbols", words: "Words",
+};
+
+const pct = (x: number) => (x * 100).toFixed(1);
+const round1 = (x: number) => Math.round(x * 10) / 10;
+
+// One order, every spelling, with the real Qwen token split.
+const ex = examples.examples[0]!;
+const spell = ORDER.map((f) => {
+  const e = (ex.encodings as any)[f];
+  return { f, name: NAME[f], text: e.text as string, tokens: e.tokens.qwen as string[] };
+});
+
+// Six rows, ranked two ways.
+const rows = ORDER.map((f) => ({ f, name: NAME[f], ...qwen.arms[f]! }));
+const byLen = [...rows].sort((a, b) => b.tokens - a.tokens).map((r) => r.f);
+const byAcc = [...rows].sort((a, b) => b.em - a.em).map((r) => r.f);
+
+// A hundred orders: right, loudly wrong (did not parse), quietly wrong.
+function hundred(a: Arm) {
+  const ok = Math.round(a.em * 100);
+  const silent = Math.round(a.silent * 100);
+  return { ok, loud: 100 - ok - silent, silent };
+}
+const grid = { exr: hundred(qwen.arms.exr!), words: hundred(qwen.arms.words!) };
+
+const W = qwen.arms.words!, X = qwen.arms.exr!, D = qwen.arms.dsl!;
+const speedup = (X.latencyMs / W.latencyMs).toFixed(1);
+const silentRatio = (X.silent / W.silent).toFixed(0);
+const LW = lfm2.arms.words!, LD = lfm2.arms.dsl!;
+
+const h = hero.silentError;
+const race = {
+  exr: { ms: Math.round(X.latencyMs), tokens: spell.find((s) => s.f === "exr")!.tokens },
+  words: { ms: Math.round(W.latencyMs), tokens: spell.find((s) => s.f === "words")!.tokens },
+};
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Adds the cross-origin isolation headers GitHub Pages cannot send, so the
+         in-browser model can use every core. Must run before anything else. -->
+    <script is:inline src={`${base}coi-serviceworker.min.js`}></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parsed, Plausible, Wrong</title>
+    <meta name="description" content="A tiny AI reads pizza orders. Sometimes it's wrong and nothing notices. How the way it writes its answer changes that." />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" crossorigin="anonymous"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=JetBrains+Mono:wght@400;600&display=swap" />
+  </head>
+  <body>
+    <div class="progress" aria-hidden="true"><i></i></div>
+    <header class="masthead">
+      <a href="#hero" class="brand">p<span>·</span>p<span>·</span>w</a>
+      <span class="where" aria-live="polite"></span>
+    </header>
+
+    <main>
+      <!-- 0 · Hero -->
+      <section id="hero" class="hero" data-label="">
+        <div class="hero-grid">
+          <div>
+            <h1 class="kinetic" aria-label="Parsed, plausible, wrong.">
+              <span class="line" data-split>Parsed,</span>
+              <span class="line" data-split>Plausible,</span>
+              <span class="line wrong" data-split>Wrong.</span>
+            </h1>
+            <p class="sub fade-up">
+              A tiny AI reads pizza orders. Sometimes its answer looks perfect and
+              is still wrong, and nothing catches it. Scroll to see why, and the
+              surprisingly simple fix.
+            </p>
+          </div>
+          <div class="live fade-up" data-mode="demo">
+            <div class="live-head">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span class="live-mode">replaying real outputs</span>
+              <span class="live-ms"></span>
+            </div>
+            <label class="live-in">
+              <span class="who">customer says</span>
+              <textarea class="live-input" rows="2" spellcheck="false" readonly
+                aria-label="A pizza order for the model to read"></textarea>
+            </label>
+            <div class="live-out">
+              <span class="who">ticket the model writes</span>
+              <div class="live-ticket"><div class="tix"></div></div>
+              <p class="live-note"></p>
+            </div>
+            <div class="live-try" hidden>
+              <span>try</span>
+              <button>two large pepperoni pizzas but hold the olives</button>
+              <button>a small veggie pie and three diet cokes</button>
+              <button>medium pizza with extra cheese and no onions</button>
+            </div>
+            <div class="live-foot">
+              <button class="live-load">Run the real model here</button>
+              <span class="live-meta">Qwen3.5-0.8B, fine-tuned · runs in your browser · nothing is sent</span>
+              <div class="live-bar" hidden><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="cue" aria-hidden="true"><span>scroll</span><i></i></div>
+        <script type="application/json" id="hero-data" is:inline set:html={JSON.stringify(picked.hero)} />
+      </section>
+
+      <!-- 1 · The order -->
+      <section id="order" class="scene" data-steps="4" data-label="The mistake">
+        <div class="stage">
+          <div class="caps">
+            <p class="cap" data-at="0">Someone orders a pizza.</p>
+            <p class="cap" data-at="1">A tiny model writes the ticket.</p>
+            <p class="cap" data-at="2">It looks fine. The kitchen accepts it.</p>
+            <p class="cap bad" data-at="3">It's wrong. No one noticed.</p>
+          </div>
+
+          <div class="order">
+            <article class="step said-card">
+              <span class="step-n">01 · they say</span>
+              <div class="bubble">
+                <span class="said" data-type={h.src}></span>
+              </div>
+              <span class="step-foot">a customer, in plain English</span>
+            </article>
+            <div class="wire" aria-hidden="true"><i></i></div>
+            <article class="step model-card">
+              <span class="step-n">02 · the model writes</span>
+              <div class="screen">
+                <div class="screen-bar"><span></span><span></span><span></span><b>0.8B</b></div>
+                <span class="toks">
+                  {h.tokens.filter((t) => t.replace(/^·/, "")).map((t, i) => (
+                    <span class={`tk ${t.startsWith("·") ? "sp" : ""}`} style={`--i:${i}`}>{t.replace(/^·/, "")}</span>
+                  ))}<span class="caret" aria-hidden="true"></span>
+                </span>
+              </div>
+              <span class="step-foot">{h.tokens.length} tokens, one at a time</span>
+            </article>
+            <div class="wire" aria-hidden="true"><i></i></div>
+            <article class="step ticket-card">
+              <span class="step-n">03 · the kitchen reads</span>
+              <div class="ticket">
+                <span class="ticket-head">order #0427 <b class="stamp">accepted</b></span>
+                {(h.predFields as [string, string][]).map(([k, v], i) => (
+                  <div class={`row ${k === h.diff.field ? "diff" : ""}`} style={`--i:${i}`}>
+                    <span class="k">{k.toLowerCase()}</span>
+                    <span class="v">{v.replace(/_/g, " ").toLowerCase()}</span>
+                  </div>
+                ))}
+                <p class="fix">they asked for <b>{h.diff.expected.toLowerCase()}</b>, as a topping</p>
+              </div>
+              <span class="step-foot">valid ticket, so nothing complains</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <div class="band" aria-hidden="true">
+        <div class="track">
+          {Array.from({ length: 6 }).map(() => (
+            <span>parsed <em>✓</em> plausible <em>✓</em> wrong <em class="x">✗</em></span>
+          ))}
+        </div>
+      </div>
+
+      <!-- 2 · Six spellings -->
+      <section id="spell" class="scene" data-steps="6" data-label="Six spellings" data-tint="violet">
+        <div class="stage">
+          <p class="kicker">One order, six ways to write the ticket</p>
+          <p class="said-big">“{ex.src}”</p>
+          <div class="spell" style={`--fc: var(--c-${spell[0]!.f})`}>
+            <div class="spell-head">
+              <span class="spell-name">{spell[0]!.name}</span>
+              <span class="spell-count"><b>{spell[0]!.tokens.length}</b> tokens</span>
+            </div>
+            <div class="spell-text">{spell[0]!.text}</div>
+            <div class="spell-chips"></div>
+          </div>
+          <ol class="pips">
+            {spell.map((s) => <li style={`--fc: var(--c-${s.f})`}>{s.name}</li>)}
+          </ol>
+          <p class="hint">A token is a chunk of text the model reads or writes. More tokens means more work.</p>
+        </div>
+        <script type="application/json" id="spell-data" is:inline set:html={JSON.stringify(spell)} />
+      </section>
+
+      <!-- 3 · Shorter isn't smarter -->
+      <section id="rank" class="plain" data-label="Short ≠ smart" data-tint="violet">
+        <h2 class="big" data-reveal>Shorter isn't smarter.</h2>
+        <p class="lead fade-up">
+          Here are the six spellings, longest first. Now watch them re-sort by
+          how often the model gets the order exactly right.
+        </p>
+        <div class="toggle fade-up" role="group" aria-label="Sort by">
+          <button data-sort="len">by length</button>
+          <button data-sort="acc" aria-pressed="true">by accuracy</button>
+        </div>
+        <div class="ranks" data-sort="len"
+          data-len={byLen.join(" ")} data-acc={byAcc.join(" ")}>
+          {rows.map((r) => (
+            <div class="rk" data-f={r.f} style={`--fc: var(--c-${r.f})`}>
+              <span class="rk-name">{r.name}</span>
+              <span class="rk-dots" aria-label={`${round1(r.tokens)} tokens`}>
+                {Array.from({ length: Math.round(r.tokens) }).map(() => <i />)}
+              </span>
+              <span class="rk-acc"><b>{pct(r.em)}</b>%</span>
+            </div>
+          ))}
+        </div>
+
+        <div class="faceoff">
+          <div class="fo l" style="--fc: var(--c-dsl)">
+            <span class="fo-word">+cheese</span>
+            <span class="fo-meta">symbols · {round1(D.tokens)} tokens</span>
+            <span class="fo-num"><b data-count={pct(D.em)}>0</b>%</span>
+          </div>
+          <span class="vs">vs</span>
+          <div class="fo r" style="--fc: var(--c-words)">
+            <span class="fo-word">extra cheese</span>
+            <span class="fo-meta">words · {round1(W.tokens)} tokens</span>
+            <span class="fo-num"><b data-count={pct(W.em)}>0</b>%</span>
+          </div>
+        </div>
+        <p class="lead fade-up">
+          The same length, but a clear gap. The model already knows English.
+          It has to <em>learn</em> what a <code>+</code> means.
+        </p>
+      </section>
+
+      <!-- 4 · A hundred orders -->
+      <section id="silent" class="scene" data-steps="3" data-label="Silent errors" data-tint="red"
+        data-exr={`${grid.exr.ok} ${grid.exr.loud} ${grid.exr.silent}`}
+        data-words={`${grid.words.ok} ${grid.words.loud} ${grid.words.silent}`}>
+        <div class="stage split">
+          <div class="caps left">
+            <p class="cap" data-at="0">A hundred orders.</p>
+            <p class="cap" data-at="1">Written in brackets…</p>
+            <p class="cap" data-at="2">…and written in words.</p>
+            <div class="tally">
+              <div class="t ok"><b data-k="ok">0</b><span>right</span></div>
+              <div class="t loud"><b data-k="loud">0</b><span>loud errors</span></div>
+              <div class="t silent"><b data-k="silent">0</b><span>silent errors</span></div>
+            </div>
+            <p class="note">
+              A <span class="c-loud">loud</span> error doesn't parse, so the system
+              notices and asks again. A <span class="c-silent">silent</span> one
+              looks valid and goes to the kitchen anyway.
+            </p>
+          </div>
+          <div class="hundred" role="img" aria-label="A grid of 100 orders coloured by outcome">
+            {Array.from({ length: 100 }).map((_, i) => <i style={`--i:${i}`} />)}
+          </div>
+        </div>
+      </section>
+
+      <section class="plain shout" data-label="Silent errors" data-tint="red">
+        <h2 class="big" data-reveal>Words cut silent errors by {silentRatio}×.</h2>
+      </section>
+
+      <!-- 4b · The game -->
+      <section id="game" class="plain game" data-label="Your turn" data-tint="amber">
+        <p class="kicker fade-up">Your turn</p>
+        <h2 class="big" data-reveal>Catch it, or break it.</h2>
+        <div class="modes fade-up" role="tablist" aria-label="Game mode">
+          <button role="tab" aria-selected="true" data-mode="spot">Spot the silent error</button>
+          <button role="tab" aria-selected="false" data-mode="break">Break the real model</button>
+        </div>
+
+        <div class="pane" data-pane="spot">
+          <p class="lead">
+            Every ticket below passed the parser, and some are still wrong. Read
+            the order, check the ticket, decide.
+          </p>
+          <div class="table">
+            <div class="t-order">
+              <span class="who">order <b class="g-round">1</b> of <span class="g-total">10</span></span>
+              <p class="t-q"></p>
+            </div>
+            <div class="rcpt">
+              <span class="rcpt-head">ticket printed <b class="rcpt-stamp"></b></span>
+              <div class="tix"></div>
+            </div>
+          </div>
+          <div class="t-actions">
+            <button class="g-btn back" data-choice="back">Send it back <kbd>←</kbd></button>
+            <button class="g-btn serve" data-choice="serve">Looks right <kbd>→</kbd></button>
+            <button class="g-btn next" hidden>Next order <kbd>↵</kbd></button>
+          </div>
+          <div class="t-foot">
+            <ol class="g-pips" aria-label="Your answers so far"></ol>
+            <p class="verdict" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="break" hidden>
+          <p class="lead">
+            This is the real model, running in your browser. Write an order you
+            think it will misread. If the ticket comes back valid but wrong, you
+            broke it.
+          </p>
+          <div class="table">
+            <div class="t-order">
+              <span class="who">your order</span>
+              <textarea class="b-input" rows="3" spellcheck="false"
+                placeholder="two large pies, one with ham and one without"></textarea>
+              <button class="g-btn serve b-go" disabled>Send to the model <kbd>↵</kbd></button>
+            </div>
+            <div class="rcpt">
+              <span class="rcpt-head">ticket printed <i class="b-ms"></i></span>
+              <div class="tix"></div>
+              <p class="b-empty">the model's ticket appears here</p>
+            </div>
+          </div>
+          <div class="t-actions b-judge" hidden>
+            <span class="b-ask">Did it get your order right?</span>
+            <button class="g-btn serve" data-judge="right">Yes, it's right</button>
+            <button class="g-btn back" data-judge="wrong">No, I broke it</button>
+          </div>
+          <p class="b-tally" aria-live="polite"></p>
+          <div class="b-load">
+            <button class="live-load">Load the real model</button>
+            <span class="live-meta"></span>
+            <div class="live-bar" hidden><i></i></div>
+          </div>
+        </div>
+        <script type="application/json" id="game-data" is:inline set:html={JSON.stringify(picked.game)} />
+      </section>
+
+      <!-- 5 · Speed -->
+      <section id="race" class="plain" data-label="Speed" data-tint="blue"
+        data-race={JSON.stringify(race)}>
+        <h2 class="big" data-reveal>And it's {speedup}× faster.</h2>
+        <p class="lead fade-up">Fewer tokens to write means less waiting. Shown at half speed.</p>
+        <div class="lanes">
+          <div class="lane" data-lane="exr" style="--fc: var(--c-exr)">
+            <span class="lane-name">Brackets</span>
+            <div class="lane-out"></div>
+            <span class="lane-ms"><b>0</b> ms</span>
+          </div>
+          <div class="lane" data-lane="words" style="--fc: var(--c-words)">
+            <span class="lane-name">Words</span>
+            <div class="lane-out"></div>
+            <span class="lane-ms"><b>0</b> ms</span>
+          </div>
+        </div>
+        <button class="replay">↻ race again</button>
+      </section>
+
+      <!-- 6 · Replication -->
+      <section id="again" class="plain" data-label="Again" data-tint="violet">
+        <p class="kicker fade-up">Then we tried an even smaller model ({lfm2.label})</p>
+        <h2 class="big" data-reveal>Words were longer this time. They still won.</h2>
+        <div class="duel fade-up">
+          <div style="--fc: var(--c-dsl)">
+            <span class="d-name">Symbols</span>
+            <span class="d-tok">{round1(LD.tokens)} tokens</span>
+            <span class="d-acc"><b data-count={pct(LD.em)}>0</b>%</span>
+          </div>
+          <div style="--fc: var(--c-words)">
+            <span class="d-name">Words</span>
+            <span class="d-tok">{round1(LW.tokens)} tokens</span>
+            <span class="d-acc"><b data-count={pct(LW.em)}>0</b>%</span>
+          </div>
+        </div>
+        <p class="lead fade-up">So length was never the point. Familiar words were.</p>
+      </section>
+
+      <!-- 7 · Café -->
+      <section id="cafe" class="plain cafe" data-label="Café" data-tint="amber">
+        <p class="kicker fade-up">So we built a café ordering system with it</p>
+        <!-- Paper, coffee section: median 80 ms on an Apple M1; exact match 0.980. -->
+        <p class="giant"><b data-count="80" data-dec="0">0</b><span>ms</span></p>
+        <p class="lead fade-up">
+          per order, on an ordinary laptop. No cloud, no GPU farm, and
+          <b><span data-count="98" data-dec="0">0</span>%</b> of coffee orders exactly right.
+        </p>
+      </section>
+
+      <!-- Outro -->
+      <section id="end" class="end" data-label="" data-tint="violet">
+        <div class="assemble">
+          <div class="assemble-stage">
+            <h2 class="kinetic small outro" aria-label="Let small models speak in words.">
+              <span class="line" data-split>Let small models</span>
+              <span class="line accent" data-split>speak in words.</span>
+            </h2>
+          </div>
+        </div>
+        <footer class="credits">
+          <div class="cr-paper">
+            <span class="who">the research</span>
+            <p class="cr-title">
+              Fewer Tokens, Fewer Silent Errors: Output Format Design for Small
+              Language Models in Real Time Order Parsing
+            </p>
+            <p class="cr-links">
+              <a href={REPO + "/blob/main/paper/paper.pdf"}>Read the paper</a>
+              <a href={REPO}>Code</a>
+              <a href={model.page}>Model</a>
+            </p>
+          </div>
+          <div class="cr-people">
+            <span class="who">authors</span>
+            <ul>
+              <li><b>Umar Ahmed</b><span>ITMO University</span></li>
+              <li><b>Maxim Duanev</b><span>ITMO University</span></li>
+            </ul>
+          </div>
+          <div class="cr-lab">
+            <span class="who">research group</span>
+            <p><b>IDM Lab</b><span>Intelligent Decision Making</span><span>ITMO University</span></p>
+          </div>
+          <p class="cr-fine">
+            {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
+            benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
+            three seeds each. PIZZA is CC-BY-NC-4.0, so this site and the models
+            derived from it are for non-commercial research use.
+          </p>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      import { boot } from "../scripts/motion";
+      boot();
+    </script>
+  </body>
+</html>

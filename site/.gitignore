@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.astro/
+.parity-driver.mts
+.env.local
+
+# Exported from runs/ by tools/export_site_data.py. The full per-order files
+# are build inputs only; npm run snapshot reduces them to data/, which is what
+# gets committed and built. PIZZA-derived, CC-BY-NC-4.0.
+src/data/
+raw/
+
+# The model is published on Hugging Face, never committed (834 MB, CC-BY-NC).
+public/models/
+# Copied from node_modules by npm run coi.
+public/coi-serviceworker.min.js
+
+qa/out
+qa/results
+qa/report

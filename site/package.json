@@ -1,0 +1,27 @@
+{
+  "name": "parsed-plausible-wrong",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "npm run coi && astro dev",
+    "build": "npm run coi && node scripts/check-data.mjs && astro build",
+    "preview": "astro preview",
+    "snapshot": "node scripts/snapshot.mjs",
+    "coi": "cp node_modules/coi-serviceworker/coi-serviceworker.min.js public/",
+    "check": "astro check && tsc --noEmit",
+    "parity": "cd .. && uv run --extra pizza python tools/check_matcher_parity.py",
+    "qa": "playwright test",
+    "qa:install": "playwright install chromium webkit firefox"
+  },
+  "dependencies": {
+    "@wllama/wllama": "^3.8.1",
+    "astro": "^5.4.0",
+    "coi-serviceworker": "^0.1.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.7.3"
+  }
+}

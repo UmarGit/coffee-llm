@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "sources": [
+    "words-n2456443-s0-lr0.0001-fresh-20261028"
+  ],
+  "url": "https://huggingface.co/umarsheikh303/pizza-words-gguf/resolve/main/pizza-words-q8_0.gguf",
+  "page": "https://huggingface.co/umarsheikh303/pizza-words-gguf",
+  "run_id": "words-n2456443-s0-lr0.0001-fresh-20261028",
+  "model": "qwen",
+  "base": "Qwen/Qwen3.5-0.8B",
+  "task": "pizza",
+  "arm": "words",
+  "prompt": "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "stop": "<|im_end|>",
+  "cap": 50,
+  "licence": "CC-BY-NC-4.0",
+  "files": {
+    "q8_0": {
+      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-fresh-20261028-q8_0.gguf",
+      "bytes": 833591904,
+      "sha256": "9b8501c6ecfe17768e2f3be43c769dc682bb7edd941ad18477b392ced278b063",
+      "verify": {
+        "n": 200,
+        "agreement_with_saved": 1,
+        "em_gguf": 0.96,
+        "em_saved_same_rows": 0.96,
+        "parse_validity_gguf": 0.985,
+        "median_ms_server": 1107.3,
+        "first_disagreements": []
+      }
+    }
+  },
+  "bytes": 833591904,
+  "sha256": "9b8501c6ecfe17768e2f3be43c769dc682bb7edd941ad18477b392ced278b063"
+}

@@ -15,6 +15,11 @@
 #   ./scripts/tmux.sh latency 3    batch size 1 latency
 #   MODEL=lfm2 ./scripts/tmux.sh grid 3
 #
+# Export one run as a verified GGUF for the website (see scripts/export_model.sh):
+#
+#   ./scripts/tmux.sh export qwen words                 the paper's run, Q8_0
+#   ./scripts/tmux.sh export qwen words pizza --fresh   retrain first, then export
+#
 #   ./scripts/tmux.sh tail         follow every shard log
 #   ./scripts/tmux.sh status       which sessions are alive and how far along
 #   ./scripts/tmux.sh stop         kill every session this script started
@@ -106,6 +111,24 @@ case "$STAGE" in
   sweep|grid|latency)
     launch "$STAGE" "${2:-$(gpu_count)}"
     ;;
+  export)
+    MODEL="${2:?usage: $0 export <model> <arm> [task] [extra bench args]}"
+    ARM="${3:?usage: $0 export <model> <arm> [task] [extra bench args]}"
+    TASK="${4:-pizza}"
+    shift $(( $# < 4 ? $# : 4 ))
+    require_gpus 1
+    NAME="${PREFIX}-export-${MODEL}-${ARM}"
+    if tmux has-session -t "$NAME" 2>/dev/null; then
+      echo "$NAME already running; attach with: tmux attach -t $NAME"; exit 1
+    fi
+    tmux new-session -d -s "$NAME" \
+      "cd '$REPO' && PY='$PY' GPU=${GPU:-0} ./scripts/export_model.sh '$MODEL' '$ARM' '$TASK' $*; \
+       echo; echo '--- finished, press enter ---'; read"
+    echo "started $NAME"
+    echo
+    echo "  follow:  tmux attach -t $NAME        (detach with ctrl-b d)"
+    echo "  or:      tail -f runs/$MODEL/$TASK/logs/export-$ARM.log"
+    ;;
   select)
     echo "selecting learning rates from the completed sweep runs"
     CUDA_VISIBLE_DEVICES=0 $PY -m bench sweep --model "$MODEL" --task "$TASK" --shard 0/1
@@ -144,7 +167,7 @@ case "$STAGE" in
     [ "$found" -eq 0 ] && echo "nothing to stop"
     ;;
   *)
-    sed -n '2,17p' "$0"
+    sed -n '2,22p' "$0"
     exit 1
     ;;
 esac

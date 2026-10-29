@@ -1,6 +1,6 @@
 """python -m bench <stage> [--model qwen|lfm2] [--task pizza|coffee] [options]
 
-Stages: prepare check smoke sweep grid test grammar fewshot latency report
+Stages: prepare check smoke sweep grid test grammar fewshot latency report export
 Every stage is resumable: runs with a complete metrics.json are skipped, and
 results live under runs/<model>/<task>/ so no two combinations collide.
 """
@@ -602,6 +602,62 @@ def stage_report(args):
     return 0 if "error" not in res else 1
 
 
+def stage_export(args):
+    """One run's adapter -> verified GGUF under models/. See bench/export.py."""
+    from .export import QUANTS, export
+
+    cfg = _cfg(args)
+    t, m = active_task(), active_model()
+    arm = args.arm or t.default_arm
+    size = args.size or max(t.default_sizes)
+    where = model_task_dir()
+    py = f"uv run --extra pizza --group gpu python -m bench {{}} --model {m.name} --task {t.name}"
+
+    if arm not in cfg.caps:
+        sys.exit(
+            f"no token cap for {arm} in {caps_path()}. The data and caps are not prepared "
+            f"on this machine yet. Run:\n\n    {py.format('prepare')}\n"
+        )
+
+    # The learning rate, in order: --lr, the sweep's selection, then an existing
+    # completed run for this exact cell, so exporting a run never needs the sweep.
+    lr = args.lr or cfg.lrs.get(arm)
+    if lr is None:
+        done = sorted(
+            p.parent.name for p in where.glob(f"{arm}-n{size}-s{args.seed}-lr*/metrics.json")
+            if is_complete(p.parent.name) and "-fresh-" not in p.parent.name
+        )
+        if len(done) == 1:
+            lr = float(done[0].rsplit("-lr", 1)[1])
+            print(f"no {lrs_path().name}; using lr {lr:g} from the completed run {done[0]}")
+        else:
+            found = ", ".join(done) if done else "none"
+            sys.exit(
+                f"no learning rate for {arm}: {lrs_path()} is missing and completed runs "
+                f"for this cell are: {found}.\nPass it explicitly, e.g. --lr 0.0001 "
+                f"(the paper selected 0.0001 for qwen/words)."
+            )
+
+    rid = run_id(arm, size, args.seed, lr, args.tag or "")
+    if not args.fresh and not (run_dir(rid) / "adapter" / "adapter_config.json").exists():
+        sys.exit(
+            f"{run_dir(rid)}/adapter does not exist on this machine, so there is nothing to "
+            f"export. Either copy the adapter there, train one with --fresh, or name an "
+            f"existing tagged run with --tag (ls {where})."
+        )
+    quants = tuple(args.quant.split(","))
+    bad = [q for q in quants if q not in QUANTS]
+    if bad:
+        sys.exit(f"unknown quantization {bad}; have {sorted(QUANTS)}")
+    splits = _splits()
+    export(
+        cfg, splits, arm, size, args.seed, lr,
+        fresh=args.fresh, quants=quants, n_verify=args.verify,
+        llama_cpp_path=args.llama_cpp, use_unsloth=not args.no_unsloth, tag=args.tag or "",
+    )
+    return 0
+
+
 STAGES = {
     "prepare": stage_prepare,
     "check": stage_check,
@@ -614,6 +670,7 @@ STAGES = {
     "fewshot": stage_fewshot,
     "latency": stage_latency,
     "report": stage_report,
+    "export": stage_export,
 }
 
 
@@ -649,6 +706,16 @@ def main(argv=None):
         default=None,
         help="lower this if evaluation runs out of GPU memory (default 32)",
     )
+    export = ap.add_argument_group("export")
+    export.add_argument("--arm", help="export: which format (default: the task's default arm)")
+    export.add_argument("--size", type=int, help="export: training size (default: the full pool)")
+    export.add_argument("--seed", type=int, default=0)
+    export.add_argument("--lr", type=float, help="export: default is the selected LR in lrs.json")
+    export.add_argument("--fresh", action="store_true", help="export: train a new run first")
+    export.add_argument("--tag", help="export: an existing tagged run, e.g. fresh-20261028")
+    export.add_argument("--quant", default="q8_0", help="export: comma list of q8_0,q4_k_m,f16")
+    export.add_argument("--verify", type=int, default=200, help="export: test orders to check, 0 skips")
+    export.add_argument("--llama-cpp", default=None, help="export: llama.cpp checkout (cloned if missing)")
     args = ap.parse_args(argv)
     # One selection point for the whole process. Everything downstream reads it
     # back through config.model() and config.task().

@@ -21,7 +21,7 @@ GPUS    ?= 3
 GPU     ?= 0
 
 .PHONY: help help-server setup test test-all lint check prepare paper clean clean-runs \
-        push fetch smoke sweep grid report status models
+        push fetch fetch-model smoke sweep grid report status models export
 
 help:
 	@echo "local"
@@ -37,6 +37,7 @@ help:
 	@echo "transfer"
 	@echo "  make push          send code to the GPU server"
 	@echo "  make fetch         pull runs/ back (adapters skipped)"
+	@echo "  make fetch-model   pull the exported GGUF into site/public/models (resumable)"
 	@echo ""
 	@echo "run `make help-server` for the server side"
 
@@ -57,6 +58,11 @@ help-server:
 	@echo "  ./scripts/tmux.sh select         pick learning rates once shards finish"
 	@echo "  ./scripts/tmux.sh grid $(GPUS)       the main grid, sharded"
 	@echo "  make report                   build tables and figures"
+	@echo ""
+	@echo "export one run as a verified GGUF (for the website):"
+	@echo "  ./scripts/tmux.sh export qwen words                 the paper's run, Q8_0"
+	@echo "  ./scripts/tmux.sh export qwen words pizza --fresh   retrain first, new tag"
+	@echo "  make export ARM=words ARGS=--fresh                  same, in the foreground"
 	@echo ""
 	@echo "every target takes MODEL= and TASK=, e.g. make check MODEL=lfm2"
 
@@ -81,6 +87,11 @@ smoke:
 report:
 	$(BENCH) --model $(MODEL) --task $(TASK) report
 
+ARM  ?= words
+ARGS ?=
+export:
+	GPU=$(GPU) ./scripts/export_model.sh $(MODEL) $(ARM) $(TASK) $(ARGS)
+
 models:
 	@$(UV) --extra pizza python -c "from bench import models, tasks; \
 	  [print(f'model  {m.name:6} {m.hf_id:24} vocab {m.vocab_size}') for m in models.MODELS.values()]; \
@@ -100,7 +111,10 @@ push:
 	./scripts/push_code.sh
 
 fetch:
-	./scripts/fetch_runs.sh
+	./scripts/fetch_runs.sh  --with-adapters
+
+fetch-model:
+	./scripts/fetch_model.sh $(ARGS)
 
 clean:
 	$(MAKE) -C paper clean

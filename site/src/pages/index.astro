@@ -6,8 +6,17 @@ import examples from "../../data/examples.json";
 import counts from "../../data/counts.qwen.json";
 import picked from "../../data/rounds.json";
 import model from "../../data/model.json";
+import guard from "../../data/guardrail.json";
 
 const REPO = "https://github.com/UmarGit/coffee-llm";
+const G = guard.negatives;
+const pct0 = (x: number) => Math.round(x * 100);
+// The gate replays the run's real refusals and real test orders (accepted at the
+// measured rate); see data/guardrail.json.
+const gate = {
+  refused: guard.probes.map((p) => p.src),
+  accepted: picked.game.correct.slice(0, 16).map((r: { src: string }) => r.src),
+};
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 
 type Arm = { tokens: number; em: number; validity: number; silent: number; latencyMs: number };
@@ -119,7 +128,7 @@ const race = {
             </div>
             <div class="live-foot">
               <button class="live-load">Run the real model here</button>
-              <span class="live-meta">Qwen3.5-0.8B, fine-tuned · runs in your browser · nothing is sent</span>
+              <span class="live-meta">Qwen3.5-0.8B, fine-tuned, menu-only guardrail · runs in your browser · nothing is sent</span>
               <div class="live-bar" hidden><i></i></div>
             </div>
           </div>
@@ -351,6 +360,37 @@ const race = {
         <script type="application/json" id="game-data" is:inline set:html={JSON.stringify(picked.game)} />
       </section>
 
+      <!-- 4c · The guardrail -->
+      <section id="gate" class="plain gate-sec" data-label="Guardrail" data-tint="red"
+        data-gate={JSON.stringify(gate)}>
+        <p class="kicker fade-up">The guardrail</p>
+        <h2 class="big" data-reveal>Only the menu gets in.</h2>
+        <p class="lead fade-up">
+          People type anything into a demo. So the live model was retrained to
+          parse orders from the menu and answer <code>?</code> to everything else:
+          gibberish, chatter, horses, and orders with anything extra in them.
+        </p>
+        <div class="gate fade-up" aria-label="Inputs flowing toward the model: menu orders pass, everything else is refused">
+          <div class="gate-lane"></div>
+          <div class="gate-door" aria-hidden="true"><span>model</span></div>
+          <div class="gate-tally">
+            <span class="g-in"><b>0</b> parsed</span>
+            <span class="g-out"><b>0</b> refused with ?</span>
+          </div>
+        </div>
+        <div class="gate-stats">
+          <div><b data-count={pct0(G.handled_junk)} data-dec="0">0</b><span>of gibberish refused</span></div>
+          <div><b data-count={pct0(G.handled)} data-dec="0">0</b><span>of nonsense it never saw, refused</span></div>
+          <div><b>{guard.probes.length}/{guard.probes.length}</b><span>demo-style prompts refused</span></div>
+          <div class="cost"><b data-count={(G.false_reject_on_test * 100).toFixed(1)} data-dec="1">0</b><span>of real orders refused too: the price of strictness</span></div>
+        </div>
+        <p class="fine-print fade-up">
+          Refusals shown are the run's real outputs on its challenge prompts;
+          accepted orders are real PIZZA test orders, passing at the measured rate.
+          The paper's numbers above come from models trained without this guardrail.
+        </p>
+      </section>
+
       <!-- 5 · Speed -->
       <section id="race" class="plain" data-label="Speed" data-tint="blue"
         data-race={JSON.stringify(race)}>
@@ -438,8 +478,10 @@ const race = {
           <p class="cr-fine">
             {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
             benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
-            three seeds each. PIZZA is CC-BY-NC-4.0, so this site and the models
-            derived from it are for non-commercial research use.
+            three seeds each. Every number on the page comes from those runs; the
+            live demo runs a stricter variant ({model.run_id}) trained to refuse
+            anything that is not a menu order. PIZZA is CC-BY-NC-4.0, so this site
+            and the models derived from it are for non-commercial research use.
           </p>
         </footer>
       </section>

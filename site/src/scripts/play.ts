@@ -54,9 +54,7 @@ function paint(box: Element, lines: Line[], wrong: string[] = [], missing: strin
 /** A model trained with negatives answers "?" instead of inventing a ticket. */
 function rejectNote(lines: Line[]) {
   if (!lines.some((l) => l.reject)) return "";
-  return lines.every((l) => l.reject)
-    ? "Refused with ?. Nothing goes to the kitchen; the system asks the customer again."
-    : "It printed the real items and flagged the rest with ?, so the system can ask about it.";
+  return "Refused with ?. Only orders from the menu are parsed; nothing goes to the kitchen and the system asks again.";
 }
 
 /** Every load button and progress bar on the page follows the one engine. */
@@ -351,6 +349,81 @@ function breakIt(root: HTMLElement) {
     }));
 }
 
+/* ---------- the guardrail gate ---------- */
+
+/**
+ * Inputs drift toward the model. Menu orders pass through the gate and print;
+ * everything else hits it, gets a "?" and bounces away.
+ */
+export function gate() {
+  const sec = document.getElementById("gate");
+  if (!sec) return;
+  const data: { refused: string[]; accepted: string[] } = JSON.parse(sec.dataset.gate!);
+  const lane = sec.querySelector<HTMLElement>(".gate-lane")!;
+  const nIn = sec.querySelector<HTMLElement>(".g-in b")!;
+  const nOut = sec.querySelector<HTMLElement>(".g-out b")!;
+  // Chips must fit before the gate, so the text is cut to the lane's width.
+  const short = (t: string) => {
+    const max = lane.clientWidth < 520 ? 16 : 34;
+    return t.length > max ? t.slice(0, max - 2) + "…" : t;
+  };
+
+  if (reduced) {
+    for (const t of data.refused.slice(0, 6)) lane.append(el("span", "g-chip out still", `${short(t)}  →  ?`));
+    for (const t of data.accepted.slice(0, 3)) lane.append(el("span", "g-chip in still", `${short(t)}  →  parsed`));
+    return;
+  }
+
+  let visible = false, n = 0, passed = 0, refused = 0;
+  new IntersectionObserver(([e]) => { visible = e!.isIntersecting; }, { threshold: 0.2 }).observe(sec);
+
+  const launch = () => {
+    // Roughly the real mix of a public demo: mostly junk, some real orders.
+    const ok = n % 3 === 1;
+    const pool = ok ? data.accepted : data.refused;
+    const text = pool[(n * 7) % pool.length]!;
+    n++;
+    const chip = el("span", `g-chip ${ok ? "in" : "out"}`, short(text));
+    chip.style.top = `${8 + ((n * 37) % 76)}%`;
+    lane.append(chip);
+    const w = lane.clientWidth, gateX = w * 0.58 - chip.offsetWidth;
+    const travel = 2600 + Math.random() * 900;
+    const a = chip.animate(
+      [{ transform: "translateX(-20px)", opacity: 0 }, { opacity: 1, offset: 0.15 },
+       { transform: `translateX(${gateX}px)` }],
+      { duration: travel, easing: "cubic-bezier(.4,0,.6,1)", fill: "forwards" },
+    );
+    a.onfinish = () => {
+      if (ok) {
+        chip.classList.add("passed");
+        nIn.textContent = String(++passed);
+        chip.animate(
+          [{ transform: `translateX(${gateX}px)` }, { transform: `translateX(${w}px)`, opacity: 0 }],
+          { duration: 1500, easing: "cubic-bezier(.3,0,.2,1)", fill: "forwards" },
+        ).onfinish = () => chip.remove();
+      } else {
+        chip.classList.add("bounced");
+        chip.dataset.q = "?";
+        nOut.textContent = String(++refused);
+        const spin = (Math.random() * 30 - 15).toFixed(0);
+        chip.animate(
+          [{ transform: `translateX(${gateX}px)` },
+           { transform: `translateX(${gateX - 40}px) translateY(-14px) rotate(${spin}deg)`, offset: 0.35 },
+           { transform: `translateX(${gateX - 160}px) translateY(60px) rotate(${Number(spin) * 3}deg)`, opacity: 0 }],
+          { duration: 1300, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" },
+        ).onfinish = () => chip.remove();
+      }
+    };
+  };
+
+  (async () => {
+    for (;;) {
+      if (visible && !document.hidden) launch();
+      await wait(visible ? 900 : 400);
+    }
+  })();
+}
+
 /* ---------- wiring ---------- */
 
 export function game() {
@@ -379,4 +452,5 @@ export function boot() {
   loaders();
   liveHero();
   game();
+  gate();
 }

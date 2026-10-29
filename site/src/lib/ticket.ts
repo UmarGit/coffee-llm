@@ -16,8 +16,11 @@ const QUANT = new Set(["extra", "more", "light", "less", "little", "lot_of", "a_
 const human = (w: string) => w.replace(/_/g, " ");
 
 export function readTicket(text: string): Line[] {
+  // The model refuses whole: a "?" anywhere means nothing in the input is served.
+  if (text.split(/[\s;]+/).includes(REJECT)) {
+    return [{ head: "?", chips: ["not an order from the menu"], reject: true }];
+  }
   return text.split(";").map((part) => part.trim()).filter(Boolean).map((part) => {
-    if (part === REJECT) return { head: "?", chips: ["not an order, or not on the menu"], reject: true };
     const t = part.split(/\s+/);
     const kind = t[0] === "drink" || t[0] === "pizza" ? t.shift()! : "";
     let qty = "", size = "";

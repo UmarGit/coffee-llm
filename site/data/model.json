@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "sources": [
-    "words-n2456443-s0-lr0.0001-neg15-fresh-20261029"
+    "words-n2456443-s0-lr0.0001-neg30-fresh-20261029"
   ],
   "url": "https://huggingface.co/umarsheikh303/pizza-words-gguf/resolve/main/pizza-words-q8_0.gguf",
   "page": "https://huggingface.co/umarsheikh303/pizza-words-gguf",
-  "run_id": "words-n2456443-s0-lr0.0001-neg15-fresh-20261029",
+  "run_id": "words-n2456443-s0-lr0.0001-neg30-fresh-20261029",
   "model": "qwen",
   "base": "Qwen/Qwen3.5-0.8B",
   "task": "pizza",
@@ -14,30 +14,40 @@
   "stop": "<|im_end|>",
   "cap": 50,
   "licence": "CC-BY-NC-4.0",
-  "negatives": 0.15,
+  "negatives": 0.3,
   "reject": "?",
   "files": {
     "q8_0": {
-      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-neg15-fresh-20261029-q8_0.gguf",
+      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-neg30-fresh-20261029-q8_0.gguf",
       "bytes": 833591904,
-      "sha256": "5e91255f914c3f89d887ab3516fee52ec00be49403103ffd9027adf565169bba",
+      "sha256": "188df7ebc3d119b3fd5f4aa2d25ffbbf2288c41da678a1b6b97985a9aea0c97f",
       "verify": {
         "n": 200,
-        "agreement_with_saved": 0.995,
-        "em_gguf": 0.965,
-        "em_saved_same_rows": 0.965,
-        "parse_validity_gguf": 0.975,
-        "median_ms_server": 1103.9,
+        "agreement_with_saved": 0.985,
+        "em_gguf": 0.955,
+        "em_saved_same_rows": 0.94,
+        "parse_validity_gguf": 0.965,
+        "median_ms_server": 1102,
         "first_disagreements": [
           {
-            "src": "get me two pepsis a coke and five large fantas",
-            "saved": "drink 5 large fanta ; drink 2 pepsi ; drink 1 coke",
-            "gguf": "drink 5 large fanta ; drink 1 coke ; drink 2 pepsi"
+            "src": "i would like to have one pie along with ham and olives without pepperoni",
+            "saved": "pizza 1 style all_toppings ham olives no pepperoni",
+            "gguf": "pizza 1 ham olives no pepperoni"
+          },
+          {
+            "src": "get me an olive and pepperoni pizza with no pesto",
+            "saved": "pizza 1 olive pepperoni no pesto",
+            "gguf": "pizza 1 olives pepperoni no pesto"
+          },
+          {
+            "src": "i want to order a small pepper sausage and pineapple pizza",
+            "saved": "pizza 1 small pepper sausage pineapple",
+            "gguf": "pizza 1 small peppers sausage pineapple"
           }
         ]
       }
     }
   },
   "bytes": 833591904,
-  "sha256": "5e91255f914c3f89d887ab3516fee52ec00be49403103ffd9027adf565169bba"
+  "sha256": "188df7ebc3d119b3fd5f4aa2d25ffbbf2288c41da678a1b6b97985a9aea0c97f"
 }

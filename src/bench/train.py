@@ -128,9 +128,10 @@ def build(cfg, seed, use_unsloth=True):
 
 
 class EarlyStop:
-    def __init__(self, model, tok, rows, arm, cap, cfg):
+    def __init__(self, model, tok, rows, arm, cap, cfg, neg_rows=None):
         self.model, self.tok, self.rows = model, tok, rows
         self.arm, self.cap, self.cfg = arm, cap, cfg
+        self.neg_rows = neg_rows
         self.curve, self.best, self.state, self.stale = [], (-1.0, 0), None, 0
 
     def step(self, step):
@@ -139,11 +140,23 @@ class EarlyStop:
         res, *_ = evaluate.evaluate_split(
             self.model, self.tok, self.rows, self.arm, self.cap, self.cfg.gen_batch_size
         )
-        self.curve.append(
-            {"step": step, "dev_em": res["em"], "dev_validity": res["parse_validity"]}
-        )
-        if res["em"] > self.best[0]:
-            self.best = (res["em"], step)
+        point = {"step": step, "dev_em": res["em"], "dev_validity": res["parse_validity"]}
+        score = res["em"]
+        if self.neg_rows:
+            # With negatives, a checkpoint must parse orders AND refuse everything
+            # else; selecting on dev EM alone stops before refusal is learned.
+            t = active_task()
+            outs, _ = evaluate.generate(
+                self.model, self.tok, [t.source(r) for r in self.neg_rows], self.cap,
+                self.cfg.gen_batch_size,
+            )
+            handled = t.negatives.score(outs, self.neg_rows, self.arm)["handled"]
+            point["dev_neg_handled"] = handled
+            score = (res["em"] + handled) / 2
+        point["selection_score"] = score
+        self.curve.append(point)
+        if score > self.best[0]:
+            self.best = (score, step)
             self.state = {
                 k: v.detach().cpu().clone()
                 for k, v in self.model.state_dict().items()
@@ -212,7 +225,8 @@ def train_one(
         ]
     )
 
-    stopper = EarlyStop(model, tok, splits["dev"], arm, cap, cfg)
+    neg_dev = t.negatives.dev_rows(splits["dev"], seed=seed) if cfg.negatives else None
+    stopper = EarlyStop(model, tok, splits["dev"], arm, cap, cfg, neg_dev)
     losses = []
 
     class Hook(TrainerCallback):
@@ -258,7 +272,12 @@ def train_one(
         "lr": lr,
         "cap": cap,
         "best_step": stopper.best[1],
-        "best_dev_em_during_training": stopper.best[0],
+        # The selection score is dev EM, or with negatives the mean of dev EM and
+        # negatives handled; dev EM itself is recorded either way.
+        "best_dev_em_during_training": next(
+            (c["dev_em"] for c in stopper.curve if c["step"] == stopper.best[1]), stopper.best[0]
+        ),
+        "best_selection_score": stopper.best[0],
         "pool_size": size,
         "examples_seen": stopper.best[1] * cfg.batch_size,
         "samples_seen_max": cfg.max_steps * cfg.batch_size,
@@ -289,16 +308,18 @@ def train_one(
             )
 
     if cfg.negatives:
-        # Held-out phrases only, so this measures whether rejection generalises.
-        neg_rows = t.negatives.eval_rows(splits["test"], seed=seed)
+        # Held-out vocabulary only, so this measures whether refusal generalises,
+        # plus the fixed challenge set of things people type into a demo.
+        neg = t.negatives
+        neg_rows = neg.eval_rows(splits["test"], seed=seed) + neg.probe_rows()
         neg_out, _ = evaluate.generate(
             model, tok, [t.source(r) for r in neg_rows], cap, cfg.gen_batch_size
         )
-        metrics_out["negatives"] = t.negatives.score(neg_out, neg_rows, arm, test_outputs)
+        metrics_out["negatives"] = neg.score(neg_out, neg_rows, arm, test_outputs)
         with open(out / "negatives_predictions.jsonl", "w") as f:
             for r, o in zip(neg_rows, neg_out):
                 f.write(json.dumps({"src": r["src"], "kind": r["neg"], "raw": o,
-                                    "correct": t.negatives.correct(o, r, arm)}) + "\n")
+                                    "correct": neg.correct(o, r, arm)}) + "\n")
         print(f"  negatives {rid}: {json.dumps(metrics_out['negatives'])}", flush=True)
 
     (out / "curves.json").write_text(

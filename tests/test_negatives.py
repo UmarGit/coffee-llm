@@ -1,4 +1,4 @@
-"""Negative training data for PIZZA: inputs that are not an order."""
+"""Negative training data for PIZZA: only menu orders are parsed, all else is "?"."""
 
 import pytest
 
@@ -14,37 +14,51 @@ ROWS = [
      "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (SIZE LARGE ) (TOPPING HAM ) ) )"},
     {"src": "two cokes please",
      "exr": "(ORDER (DRINKORDER (NUMBER 2 ) (DRINKTYPE COKE ) ) )"},
-] * 50
+] * 200
+
+# The real vocabulary needs the training pool; a stand-in keeps the unit tests fast.
+VOCAB = frozenset("i want a large pizza with ham two cokes please".split())
 
 
-def test_off_menu_items_are_not_on_the_menu():
-    # "iced tea", "coffee" or "cheeseburger" are PIZZA entities; rejecting them
-    # would teach the model to refuse real orders.
+@pytest.fixture(autouse=True)
+def small_vocab(monkeypatch):
+    monkeypatch.setattr(negatives, "pizza_vocab", lambda: VOCAB)
+
+
+def test_nothing_on_the_menu_is_taught_as_a_refusal():
+    # e.g. "cheeseburger" is a PIZZA topping and "iced tea" a PIZZA drink.
     assert negatives.collisions() == []
 
 
-def test_eval_phrases_are_never_trained_on():
-    assert not set(negatives.NON_EVAL) & set(negatives.NON_TRAIN)
-    assert not set(negatives.OFF_EVAL) & set(negatives.OFF_TRAIN)
-    assert negatives.NON_EVAL and negatives.OFF_EVAL
+def test_eval_vocabulary_is_never_trained_on():
+    for name, (train, held) in negatives.VOCAB.items():
+        assert held and not set(train) & set(held), name
 
 
-def test_mix_hits_the_fraction_and_is_deterministic():
-    a = negatives.mix(ROWS, 0.2, 0, "words")
-    b = negatives.mix(ROWS, 0.2, 0, "words")
-    assert a == b
+def test_mix_fraction_kinds_and_determinism():
+    a = negatives.mix(ROWS, 0.3, 0, "words")
+    assert a == negatives.mix(ROWS, 0.3, 0, "words")
     neg = [r for r in a if r.get("neg")]
-    assert len(neg) == 25 and len(a) == 125
-    assert {r["neg"] for r in neg} == {"non", "off", "mixed"}
+    assert len(neg) == round(len(ROWS) * 0.3 / 0.7)
+    assert {r["neg"] for r in neg} == set(negatives.KINDS)
 
 
-@pytest.mark.parametrize("arm", negatives.ARMS)
-def test_targets_round_trip_through_the_scorer(arm):
-    for r in negatives.mix(ROWS, 0.5, 1, arm):
-        if not r.get("neg"):
-            continue
-        out = negatives.target(r, arm)
-        assert negatives.correct(out, r, arm), (r, out)
+def test_every_negative_is_refused_whole():
+    for r in negatives.mix(ROWS, 0.5, 1, "words"):
+        if r.get("neg"):
+            assert negatives.target(r, "words") == "?"
+
+
+def test_added_words_are_outside_real_order_language():
+    for r in negatives.mix(ROWS, 0.5, 2, "words"):
+        if r.get("neg") == "unknown":
+            assert set(r["src"].split()) - VOCAB, r["src"]
+
+
+def test_whole_negatives_never_name_a_menu_item():
+    for r in negatives.eval_rows(ROWS, n=300):
+        if r["neg"] in ("non", "off", "junk", "long"):
+            assert negatives.on_menu(r["src"]) is None, r["src"]
 
 
 def test_bracketed_arms_are_refused():
@@ -52,16 +66,16 @@ def test_bracketed_arms_are_refused():
         negatives.mix(ROWS, 0.2, 0, "exr")
 
 
-def test_scoring():
-    rows = negatives.eval_rows(ROWS, n=3)
-    kinds = [r["neg"] for r in rows]
-    assert kinds == ["non", "off", "mixed"]
-    mixed_ok = negatives.target(rows[2], "words")
-    res = negatives.score(["?", "pizza 1 ham", mixed_ok], rows, "words",
-                          test_outputs=["pizza 1 ham", "pizza 1 ham ; ?"])
-    assert res["handled_non"] == 1 and res["handled_off"] == 0 and res["handled_mixed"] == 1
+def test_scoring_is_strict():
+    rows = [{"src": "hehe hehe", "neg": "junk"}, {"src": "a hehe pizza", "neg": "unknown"},
+            {"src": "two cats", "neg": "off"}]
+    res = negatives.score(["?", "pizza 1 ; ?", "pizza 1 style cats"], rows, "words",
+                          test_outputs=["pizza 1 ham", "?", "pizza 1 ham ; ?", "drink 2 coke"])
+    # Only "?" alone counts: a half-parsed ticket or an invented one does not.
+    assert res["handled_junk"] == 1 and res["handled_unknown"] == 0 and res["handled_off"] == 0
     assert res["false_reject_on_test"] == 0.5
-    # A mixed order without the flag, or with a wrong ticket, is not handled.
-    base = mixed_ok.rsplit(" ; ?", 1)[0]
-    assert not negatives.correct(base, rows[2], "words")
-    assert not negatives.correct("pizza 9 ham ; ?", rows[2], "words")
+
+
+def test_probes_include_the_reported_failures():
+    assert "two cats and dog" in negatives.PROBES
+    assert all(r["neg"] == "probe" for r in negatives.probe_rows())

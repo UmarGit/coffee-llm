@@ -538,6 +538,50 @@ body[data-model="ready"] .b-load { display: none; }
   transition: font-variation-settings 0.5s var(--ease);
 }
 
+/* ---------- the guardrail gate ---------- */
+.gate-sec .big { color: var(--red); max-width: 13ch; }
+.gate {
+  position: relative; height: clamp(300px, 42svh, 420px); margin: 10px 0 40px;
+  border: 1px solid var(--line); border-radius: 24px; background: var(--bg-2); overflow: hidden;
+}
+.gate-lane { position: absolute; inset: 0; }
+.gate-door {
+  position: absolute; top: 0; bottom: 0; left: 58%; width: 3px;
+  background: linear-gradient(var(--line), var(--ink-2), var(--line));
+  box-shadow: 0 0 24px 2px color-mix(in oklch, var(--green) 30%, transparent);
+}
+.gate-door span {
+  position: absolute; top: 14px; left: 10px; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+}
+.gate-tally { position: absolute; left: 18px; bottom: 14px; display: flex; gap: 18px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+.gate-tally b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.g-in b { color: var(--green); }
+.g-out b { color: var(--red); }
+.g-chip {
+  position: absolute; left: 0; white-space: nowrap; font-family: var(--mono); font-size: clamp(11px, 1vw, 14px);
+  padding: 6px 12px; border-radius: 99px; background: var(--bg-3); color: var(--ink-2);
+  border: 1px solid var(--line); transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
+.g-chip.passed { background: var(--green); color: var(--bg); border-color: var(--green); }
+.g-chip.bounced { background: color-mix(in oklch, var(--red) 25%, var(--bg-2)); color: var(--red); border-color: var(--red); }
+.g-chip.bounced::after {
+  content: attr(data-q); position: absolute; right: -10px; top: -12px; width: 22px; height: 22px;
+  display: grid; place-items: center; border-radius: 50%; background: var(--red); color: var(--bg);
+  font-weight: 600; animation: pop 0.35s var(--spring) both;
+}
+.g-chip.still { position: static; display: inline-block; margin: 6px; }
+.gate-lane:has(.still) { position: static; padding: 16px; }
+.g-chip.in.still { color: var(--green); }
+.g-chip.out.still { color: var(--red); }
+.gate-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(16px, 3vw, 40px); margin-bottom: 28px; }
+.gate-stats div { display: flex; flex-direction: column; gap: 6px; border-top: 2px solid var(--line); padding-top: 14px; }
+.gate-stats b { font-size: clamp(40px, 5vw, 76px); line-height: 1; letter-spacing: -0.03em; font-variation-settings: "wght" 760; font-variant-numeric: tabular-nums; color: var(--ink); }
+.gate-stats b[data-count]::after { content: "%"; font-size: 0.45em; margin-left: 2px; color: var(--ink-3); }
+.gate-stats span { font-size: 15px; color: var(--ink-3); max-width: 22ch; }
+.gate-stats .cost b { color: var(--amber); }
+.fine-print { font-family: var(--mono); font-size: 12px; color: var(--ink-3); max-width: 80ch; line-height: 1.6; }
+
 /* ---------- small screens ---------- */
 @media (max-width: 820px) {
   .order { grid-template-columns: 1fr; gap: 10px; }
@@ -565,6 +609,8 @@ body[data-model="ready"] .b-load { display: none; }
   .g-btn kbd { display: none; }
   .g-btn { flex: 1; padding: 14px 16px; }
   .credits { grid-template-columns: 1fr; gap: 28px; }
+  .gate-stats { grid-template-columns: 1fr 1fr; }
+  .gate-door { left: 62%; }
   .modes button { padding: 9px 12px; font-size: 14px; }
 }
 @media (max-width: 1000px) {

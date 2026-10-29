@@ -11,8 +11,8 @@ tags: [gguf, llama.cpp, semantic-parsing, pizza, lora, wllama, guardrails]
 
 Qwen3.5-0.8B fine-tuned with LoRA to turn a spoken-style pizza order into a
 structured ticket, written in the **WORDS** output format (`pizza 2 large
-pepperoni no olives`). It also answers `?` when the input is not an order or
-asks for something off the menu, instead of inventing a ticket. Merged and exported as a single Q8_0 GGUF for llama.cpp,
+pepperoni no olives`). It is deliberately strict: it parses orders made only of
+menu items, and answers `?` to everything else, instead of inventing a ticket. Merged and exported as a single Q8_0 GGUF for llama.cpp,
 and the model that runs live, in the browser, on
 [Parsed, Plausible, Wrong](https://umargit.github.io/coffee-llm/).
 
@@ -52,32 +52,42 @@ curl -s localhost:8080/completion -d '{
 }' | jq -r .content
 ```
 
-## Not an order: `?`
+## Only the menu: everything else is `?`
 
-15% of the training rows were negatives, built the way the café parser's were:
+30% of the training rows were negatives, generated the way the café parser's
+were, and every one of them is answered with `?` alone:
 
-| input | output |
+| kind | example |
 |---|---|
-| a non-order: `hello`, `where is the restroom` | `?` |
-| an off-menu request: `can i get two apples` | `?` |
-| an order plus something off the menu: `a large ham pizza and some fries` | `pizza 1 large ham ; ?` |
+| chatter and questions | `hello`, `where is the restroom` |
+| off-menu requests | `two cats and a dog`, `can i get a burger` |
+| gibberish, any language | `hehe hehe`, `asdkjh`, `1 hello world cola`, `привет` |
+| long text | `lorem ipsum dolor sit amet ...` |
+| an order with something off the menu | `a large ham pizza and some fries` |
+| an order with an unknown word | `a party sized zebra with extra cheese` |
 
-`?` is a suborder of its own, so a consumer can split on `;`, serve the real
-items and ask again about the rest. Off-menu items were checked against the PIZZA
-catalogs, so nothing the dataset can order is ever taught as a refusal. A quarter
-of the phrases were held out of training and only used to evaluate rejection.
+An order with anything extra in it is refused whole, never half-parsed. Nothing
+the PIZZA catalogs can order is ever used as a refusal, and words inserted into
+real orders come from outside PIZZA's 211-word order vocabulary.
+
+Held-out results (vocabulary never trained on, 614 inputs): 96.7% refused
+correctly; gibberish, long text and chatter 100%, off-menu 99%, orders mixed
+with off-menu items 94%, orders with an unknown word 90%. A fixed set of 14
+demo-style prompts: 14 of 14 refused. The price of strictness: 4.7% of real
+PIZZA test orders are refused too. Those are loud errors, so the customer is
+asked again rather than served the wrong pizza.
 
 ## Verification
 
 Before release the GGUF was run greedily through llama-server on the first 200
 PIZZA test orders and compared against the training run's own saved
-predictions: 199 of 200 identical, the one difference listing the same three
-drinks in another order, which the official matcher scores as the same order
-(exact match 0.965 on those 200, the same as the unquantized model). Run
-`words-n2456443-s0-lr0.0001-neg15-fresh-20261029`, trained on the full
-2,456,443-example PIZZA pool plus negatives, best checkpoint by dev exact match
-on PIZZA alone. For reference, the paper's run of the same configuration without
-negatives scores 0.881 exact match on the full 1,357-order test set.
+predictions: 98.5% identical. The three differences are quantization breaking
+near-ties, two of them in the GGUF's favour, so its exact match on those 200 is
+0.955 against 0.940 unquantized. Run `words-n2456443-s0-lr0.0001-neg30-fresh-20261029`,
+trained on the full 2,456,443-example PIZZA pool plus negatives, checkpoint chosen
+on dev exact match and dev refusals together. For reference, the paper's run of
+the same configuration without negatives scores 0.881 exact match on the full
+1,357-order test set.
 
 ## Licence
 

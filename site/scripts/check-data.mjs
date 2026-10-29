@@ -26,7 +26,6 @@ const fail = (m) => {
 
 for (const f of files) {
   const text = await readFile(join(DATA, f), "utf8");
-  if (PLACEHOLDER.test(text)) fail(`${f} contains placeholder text`);
   let d;
   try {
     d = JSON.parse(text);
@@ -34,6 +33,10 @@ for (const f of files) {
     fail(`${f} is not valid JSON`);
     continue;
   }
+  // Recorded challenge inputs are real user-style text ("lorem ipsum ..." is one
+  // of them), so they are exempt; everything else in the file is checked.
+  const { probes, ...rest } = d;
+  if (PLACEHOLDER.test(JSON.stringify(rest))) fail(`${f} contains placeholder text`);
   if (typeof d.schema !== "number") fail(`${f} has no schema version`);
   if (!Array.isArray(d.sources)) fail(`${f} has no sources list`);
   if (Array.isArray(d.sources) && d.sources.length === 0) {

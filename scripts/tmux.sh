@@ -19,6 +19,8 @@
 #
 #   ./scripts/tmux.sh export qwen words                 the paper's run, Q8_0
 #   ./scripts/tmux.sh export qwen words pizza --fresh   retrain first, then export
+#   ./scripts/tmux.sh export qwen words pizza --fresh --negatives 0.15 --lr 0.0001
+#                                                     same, also trained to answer "?" to non-orders
 #
 #   ./scripts/tmux.sh tail         follow every shard log
 #   ./scripts/tmux.sh status       which sessions are alive and how far along

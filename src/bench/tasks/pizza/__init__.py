@@ -7,11 +7,13 @@ never reimplemented.
 """
 
 from .. import Task
-from . import data, formats, grammar, ladder, metrics
+from . import data, formats, grammar, ladder, metrics, negatives
 from .formats import ARMS, LADDER_ARMS, MATCHED_PAIRS, decode, encode, parse_exr, to_exr
 
 
 def _target(row, arm):
+    if row.get("neg"):
+        return negatives.target(row, arm)
     return encode(parse_exr(row["exr"]), arm)
 
 
@@ -110,6 +112,7 @@ TASK = Task(
     prepare=_prepare,
     checks=_checks,
     write_grammar=lambda path: grammar.write_gbnf(path),
+    negatives=negatives,
 )
 
 __all__ = [

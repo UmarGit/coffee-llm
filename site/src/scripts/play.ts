@@ -33,7 +33,7 @@ function paint(box: Element, lines: Line[], wrong: string[] = [], missing: strin
   };
   box.textContent = "";
   lines.forEach((l, n) => {
-    const row = el("div", "tl");
+    const row = el("div", l.reject ? "tl reject" : "tl");
     row.style.setProperty("--n", String(n));
     row.append(el("span", "th" + (take(l.head) ? " bad" : ""), l.head));
     l.chips.forEach((c, i) => {
@@ -49,6 +49,14 @@ function paint(box: Element, lines: Line[], wrong: string[] = [], missing: strin
     missing.forEach((m) => row.append(el("span", "tc add", m)));
     box.append(row);
   }
+}
+
+/** A model trained with negatives answers "?" instead of inventing a ticket. */
+function rejectNote(lines: Line[]) {
+  if (!lines.some((l) => l.reject)) return "";
+  return lines.every((l) => l.reject)
+    ? "Refused with ?. Nothing goes to the kitchen; the system asks the customer again."
+    : "It printed the real items and flagged the rest with ?, so the system can ask about it.";
 }
 
 /** Every load button and progress bar on the page follows the one engine. */
@@ -136,7 +144,11 @@ export function liveHero() {
     if (c !== ctrl) return;
     delete root.dataset.busy;
     if (!res) return;
-    paint(tix, readTicket(res.text));
+    const lines = readTicket(res.text);
+    paint(tix, lines);
+    note.textContent = rejectNote(lines);
+    // A refusal is a loud error by design: shown in the loud-error colour.
+    root.dataset.o = lines.some((l) => l.reject) ? "1" : "";
     ms.textContent = `${(res.ms / 1000).toFixed(1)} s on your device`;
   };
   input.addEventListener("input", () => {
@@ -315,7 +327,9 @@ function breakIt(root: HTMLElement) {
     busy = false;
     sync();
     if (!res) return;
-    paint(tix, readTicket(res.text));
+    const lines = readTicket(res.text);
+    paint(tix, lines);
+    tally.textContent = rejectNote(lines);
     empty.textContent = "The model wrote nothing it could print.";
     empty.hidden = !!res.text;
     ms.textContent = `${(res.ms / 1000).toFixed(1)} s`;

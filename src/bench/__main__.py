@@ -57,6 +57,8 @@ def _cfg(args):
         cfg = cfg.with_(seeds=tuple(int(x) for x in args.seeds.split(",")))
     if getattr(args, "gen_batch_size", None):
         cfg = cfg.with_(gen_batch_size=args.gen_batch_size)
+    if getattr(args, "negatives", None):
+        cfg = cfg.with_(negatives=args.negatives)
     if getattr(args, "shard", None):
         i, n = (int(x) for x in args.shard.split("/"))
         cfg = cfg.with_(shard=(i, n))
@@ -713,6 +715,10 @@ def main(argv=None):
     export.add_argument("--lr", type=float, help="export: default is the selected LR in lrs.json")
     export.add_argument("--fresh", action="store_true", help="export: train a new run first")
     export.add_argument("--tag", help="export: an existing tagged run, e.g. fresh-20261028")
+    export.add_argument(
+        "--negatives", type=float, default=0.0,
+        help="fraction of training rows that are not orders, e.g. 0.15 (with --fresh)",
+    )
     export.add_argument("--quant", default="q8_0", help="export: comma list of q8_0,q4_k_m,f16")
     export.add_argument("--verify", type=int, default=200, help="export: test orders to check, 0 skips")
     export.add_argument("--llama-cpp", default=None, help="export: llama.cpp checkout (cloned if missing)")

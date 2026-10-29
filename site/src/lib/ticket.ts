@@ -3,7 +3,10 @@
  * coke") into ticket lines a person can read, and diffs two tickets.
  * Nothing is dropped: every word in the input lands in exactly one chip.
  */
-export interface Line { head: string; chips: string[] }
+export interface Line { head: string; chips: string[]; reject?: boolean }
+
+/** What a model trained with negatives writes for "not an order / not on the menu". */
+export const REJECT = "?";
 
 const SIZES = new Set([
   "small", "medium", "large", "extra_large", "personal_size", "regular",
@@ -14,6 +17,7 @@ const human = (w: string) => w.replace(/_/g, " ");
 
 export function readTicket(text: string): Line[] {
   return text.split(";").map((part) => part.trim()).filter(Boolean).map((part) => {
+    if (part === REJECT) return { head: "?", chips: ["not an order, or not on the menu"], reject: true };
     const t = part.split(/\s+/);
     const kind = t[0] === "drink" || t[0] === "pizza" ? t.shift()! : "";
     let qty = "", size = "";

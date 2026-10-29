@@ -181,7 +181,8 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
            llama_cpp_path=None, use_unsloth=True, tag=""):
     # --fresh trains under a dated tag; --tag names an already trained run, so an
     # export that failed after training can be rerun without training again.
-    tag = tag or (f"fresh-{date.today():%Y%m%d}" if fresh else "")
+    neg = f"neg{round(cfg.negatives * 100)}-" if cfg.negatives else ""
+    tag = tag or (f"{neg}fresh-{date.today():%Y%m%d}" if fresh else "")
     rid = run_id(arm, size, seed, lr, tag)
     if fresh or not is_complete(rid):
         from .train import train_one
@@ -211,6 +212,7 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
     files = convert(root, merged, out, name, quants)
     shutil.rmtree(merged)
 
+    trained_neg = json.loads((run_dir(rid) / "config.json").read_text()).get("negatives", 0.0)
     manifest = {
         "run_id": rid,
         "model": m.name,
@@ -221,6 +223,9 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
         "stop": m.eos,
         "cap": cfg.caps[arm],
         "licence": getattr(t, "licence", None),
+        # What the run was trained with, from its own config, not this command's flags.
+        "negatives": trained_neg,
+        "reject": t.negatives.REJECT if trained_neg and t.negatives else None,
         "files": {},
     }
     for q, path in files.items():

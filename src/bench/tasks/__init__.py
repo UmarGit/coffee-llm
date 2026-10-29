@@ -82,6 +82,10 @@ class Task:
     write_grammar: Callable[..., None] | None = None
     """(path) -> None, for a task with a constrained-decoding grammar."""
 
+    negatives: object = None
+    """A module with mix/target/eval_rows/score for training on inputs that are
+    not orders (see tasks/pizza/negatives.py). None means the task has none."""
+
 
 _LOADERS = {
     "pizza": lambda: __import__("bench.tasks.pizza", fromlist=["TASK"]).TASK,

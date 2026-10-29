@@ -200,6 +200,11 @@ def train_one(
     eos = active_model().eos
     fmt = evaluate.prompt_for(tok)
     train_rows = t.train_rows(size, seed)
+    if cfg.negatives:
+        if t.negatives is None:
+            raise ValueError(f"task {t.name} has no negative data")
+        # Added on top of the task's rows, so `size` still counts real orders.
+        train_rows = t.negatives.mix(train_rows, cfg.negatives, seed, arm)
     ds = Dataset.from_list(
         [
             {"prompt": fmt.format(t.source(r)), "completion": t.target(r, arm) + eos}
@@ -260,11 +265,14 @@ def train_one(
         "epochs_at_best": stopper.best[1] * cfg.batch_size / size,
         "pool_coverage": min(1.0, cfg.max_steps * cfg.batch_size / size),
     }
+    test_outputs = []
     for split in ("dev", "test"):
         res, outputs, preds, em, counts = evaluate.evaluate_split(
             model, tok, splits[split], arm, cap, cfg.gen_batch_size
         )
         metrics_out[split] = res
+        if split == "test":
+            test_outputs = outputs
         evaluate.write_predictions(
             out / f"{split}_predictions.jsonl",
             splits[split],
@@ -279,6 +287,19 @@ def train_one(
                 f"the {cap}-token cap",
                 flush=True,
             )
+
+    if cfg.negatives:
+        # Held-out phrases only, so this measures whether rejection generalises.
+        neg_rows = t.negatives.eval_rows(splits["test"], seed=seed)
+        neg_out, _ = evaluate.generate(
+            model, tok, [t.source(r) for r in neg_rows], cap, cfg.gen_batch_size
+        )
+        metrics_out["negatives"] = t.negatives.score(neg_out, neg_rows, arm, test_outputs)
+        with open(out / "negatives_predictions.jsonl", "w") as f:
+            for r, o in zip(neg_rows, neg_out):
+                f.write(json.dumps({"src": r["src"], "kind": r["neg"], "raw": o,
+                                    "correct": t.negatives.correct(o, r, arm)}) + "\n")
+        print(f"  negatives {rid}: {json.dumps(metrics_out['negatives'])}", flush=True)
 
     (out / "curves.json").write_text(
         json.dumps({"dev": stopper.curve, "loss": losses}, indent=2)

@@ -452,6 +452,8 @@ body[data-tint="blue"] { --tint: var(--c-exr); }
 .tix .add { background: var(--green); color: var(--bg); animation: pop 0.4s var(--spring) both; }
 .tix .add::before { content: "+ "; }
 .fixrow .th { opacity: 0.55; font-weight: 400; }
+.tl.reject .th { background: var(--amber); color: var(--bg); border-radius: 4px; padding: 0 7px; }
+.tl.reject .tc { background: none; border: 1px dashed oklch(0.6 0.03 70); }
 
 /* ---------- the game ---------- */
 .game .big { color: var(--amber); max-width: 16ch; }

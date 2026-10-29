@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "sources": [
-    "words-n2456443-s0-lr0.0001-fresh-20261028"
+    "words-n2456443-s0-lr0.0001-neg15-fresh-20261029"
   ],
   "url": "https://huggingface.co/umarsheikh303/pizza-words-gguf/resolve/main/pizza-words-q8_0.gguf",
   "page": "https://huggingface.co/umarsheikh303/pizza-words-gguf",
-  "run_id": "words-n2456443-s0-lr0.0001-fresh-20261028",
+  "run_id": "words-n2456443-s0-lr0.0001-neg15-fresh-20261029",
   "model": "qwen",
   "base": "Qwen/Qwen3.5-0.8B",
   "task": "pizza",
@@ -14,22 +14,30 @@
   "stop": "<|im_end|>",
   "cap": 50,
   "licence": "CC-BY-NC-4.0",
+  "negatives": 0.15,
+  "reject": "?",
   "files": {
     "q8_0": {
-      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-fresh-20261028-q8_0.gguf",
+      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-neg15-fresh-20261029-q8_0.gguf",
       "bytes": 833591904,
-      "sha256": "9b8501c6ecfe17768e2f3be43c769dc682bb7edd941ad18477b392ced278b063",
+      "sha256": "5e91255f914c3f89d887ab3516fee52ec00be49403103ffd9027adf565169bba",
       "verify": {
         "n": 200,
-        "agreement_with_saved": 1,
-        "em_gguf": 0.96,
-        "em_saved_same_rows": 0.96,
-        "parse_validity_gguf": 0.985,
-        "median_ms_server": 1107.3,
-        "first_disagreements": []
+        "agreement_with_saved": 0.995,
+        "em_gguf": 0.965,
+        "em_saved_same_rows": 0.965,
+        "parse_validity_gguf": 0.975,
+        "median_ms_server": 1103.9,
+        "first_disagreements": [
+          {
+            "src": "get me two pepsis a coke and five large fantas",
+            "saved": "drink 5 large fanta ; drink 2 pepsi ; drink 1 coke",
+            "gguf": "drink 5 large fanta ; drink 1 coke ; drink 2 pepsi"
+          }
+        ]
       }
     }
   },
   "bytes": 833591904,
-  "sha256": "9b8501c6ecfe17768e2f3be43c769dc682bb7edd941ad18477b392ced278b063"
+  "sha256": "5e91255f914c3f89d887ab3516fee52ec00be49403103ffd9027adf565169bba"
 }

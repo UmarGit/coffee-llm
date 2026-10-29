@@ -74,6 +74,9 @@ class Config:
     lr_select_size: int = 0
     lr_select_seeds: tuple = (0, 1, 2)
     truncation_warn: float = 0.01
+    negatives: float = 0.0
+    """Fraction of training rows that are not orders (tasks/pizza/negatives.py).
+    0 trains on the task's data alone, as every paper run did."""
     caps: dict = field(default_factory=dict)
     lrs: dict = field(default_factory=dict)
 

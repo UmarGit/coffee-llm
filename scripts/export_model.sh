@@ -11,6 +11,8 @@
 #
 #   ./scripts/export_model.sh qwen words                       # the paper's run, Q8_0
 #   ./scripts/export_model.sh qwen words pizza --fresh         # retrain first (~12 min), new tag
+#   ./scripts/export_model.sh qwen words pizza --fresh --negatives 0.15 --lr 0.0001
+#                                                              # also learn to answer "?" to non-orders
 #   ./scripts/export_model.sh qwen words pizza --quant q8_0,q4_k_m
 #   ./scripts/export_model.sh lfm2 words pizza --verify 0      # skip the llama-server check
 #

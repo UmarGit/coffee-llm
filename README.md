@@ -166,6 +166,11 @@ The eval set is 49 hand-written cases in
 generator and including slang the generator never produces (`флэтик`, `капучиночку`) to
 test generalisation. Current: **48/49 (98%)**.
 
+Forty-nine cases is too few to compare formats on. One case is worth 2.0 points, which is
+also what the determinism replicate reads, so the completed café grid puts both arms
+between 0.939 and 0.980 at every pool size and separates neither. It measures that the
+shipped parser works, not which encoding is better; see TASK.md item 5.
+
 Two ways to measure the model, each on the path it actually describes:
 
 ```bash
@@ -366,11 +371,15 @@ which is why the 0.003 gap between `words` and `exr` is reported as a match rath
 ### What this study does not claim
 
 Stated in advance in [PROTOCOL.md](PROTOCOL.md) so they are not argued about afterwards. In
-short: no state-of-the-art claim, since the published BART-Large EXR result used the full
-2.46M training set under a different architecture and training regime; no causal claim beyond
-the two matched pairs; single task, single model, single tokenizer, so the tokenizer floor
-finding is specific to the Qwen BPE vocabulary; and latency is a deployment figure at batch
-size one on specific hardware, not a throughput benchmark.
+short: no state-of-the-art claim, though the reason has narrowed. The headline grid now
+trains on the same 2.46M pool the published BART-Large EXR result used, less 3 rows dropped
+as contamination, so the data budget is matched; what is still not matched is the
+architecture and training regime, which is why the published number stays a reference line.
+Beyond that: no causal claim beyond the two matched pairs; two models and two tokenizers,
+which is enough to show the tokenizer floor is not a Qwen artifact but not enough to
+generalise past sub-billion-parameter models; the café task is saturated and settles
+nothing; and latency is a deployment figure at batch size one on specific hardware, not a
+throughput benchmark.
 
 ### Reproducibility
 

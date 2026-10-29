@@ -137,17 +137,32 @@ to EXR. All are per utterance unless stated.
 These are stated in advance so they are not argued about afterwards.
 
 1. **No state-of-the-art claim.** The published BART-Large EXR result (78.56 unordered EM)
-   used the full 2.46M-utterance training set. This study trains on at most 20,000 examples
-   from the 10 percent pool. The published number is drawn as a reference line only, labelled
-   with its training set size. Beating it on a different data budget is not a like-for-like
-   comparison and will not be described as one. A like-for-like claim requires a full-data
-   run, which is listed as future work.
+   used the full 2.46M-utterance training set. This rule was written when the grid topped out
+   at 20,000 examples from the 10 percent pool, and it required a full-data run before any
+   like-for-like statement. That run has since happened (see Deviations, 2026-10-28): the
+   headline grid trains on 2,456,443 utterances, the published pool less the 3 rows that
+   duplicate an evaluation utterance and are dropped as contamination.
+
+   The data-budget objection is therefore discharged and the comparison may be described as
+   like-for-like **on data**. The state-of-the-art claim is still declined, for the narrower
+   reason in item 4: the architectures and training regimes are not matched. The published
+   number stays a reference line, now labelled with both training set sizes so the 3-row
+   difference is visible rather than rounded away.
 2. **No causal claim beyond the matched pairs.** The ladder shows association between length
    and the endpoints. Only the two matched-token pairs isolate format family from length, and
    they do so at only two points on the curve.
-3. **Single task, single model, single tokenizer.** Results are for PIZZA semantic parsing
-   with Qwen3.5-0.8B. The tokenizer floor finding in section 3 is specific to the Qwen BPE
-   vocabulary and may not transfer.
+3. **Two models, two tasks, and no claim beyond them.** The primary result is PIZZA
+   semantic parsing with Qwen3.5-0.8B. LFM2.5-350M is a replication, added after the
+   primary grid (see Deviations, 2026-10-27). The cafe task was intended as a second
+   replication on a different language and a production system; its grid came back
+   saturated and separates nothing, so it is reported as a resolution limit and not as
+   support for the finding (see Deviations, 2026-10-28). Absolute scores are **not** compared
+   between models: they differ in capacity (0.773B against 0.35B), architecture
+   (attention/linear-attention against 10 convolution plus 6 attention blocks), adapter
+   targets (an explicit seven against PEFT's `all-linear`, which also reaches the
+   convolution blocks), and prompt conditioning (Qwen prefills a closed think block,
+   LFM2.5 does not). Only the **ordering of arms** and the **matched-pair differences**
+   are compared across models, because those are what the design isolates.
 4. **Architecture is not matched to the baseline.** BART-Large is an encoder-decoder trained
    fully; this is a decoder-only model with LoRA adapters. Parameter counts and training
    regimes differ.
@@ -235,3 +250,47 @@ re-verified for every subset and seed by the `check` stage.
 - 2026-10-19: the determinism replicate uses n=20000 rather than n=5000, because n=5000 is no
   longer one of the train sizes and the first replicate therefore already exists at n=20000.
   This makes the check cost one run instead of two.
+
+- 2026-10-27: a second model, LFM2.5-350M, was added as a replication after the primary
+  Qwen grid was complete. It was not pre-registered. The motivation is section 9 item 3:
+  the tokenizer-floor claim was declared untransferable, and LFM2.5's vocabulary is 65,536
+  against Qwen's 248,320, which makes it a direct test. Its grid is identical in arms,
+  sizes, seeds and stopping rules; it has its own learning-rate sweep, its own token caps
+  (a cap is tokenizer-dependent) and its own determinism replicate, and its results live in
+  a separate `runs/lfm2/pizza/`. Because it was added afterwards it is reported as a
+  replication of the ordering and of the matched pairs, never as a model comparison, and no
+  Qwen conclusion depends on it.
+- 2026-10-27: a second task, the cafe order parser, was added for the same reason. It has
+  two arms rather than six (`compact`, the shipped format, and `words`, the same content in
+  natural words), so it contributes no ladder and no slope. What it contributes is one
+  matched pair, in Russian and English rather than English alone, on the system actually in
+  production. Its test split is the 49 hand-written cases, which is small enough that it can
+  support a directional statement and not a precise one, and that limit is reported with
+  the result.
+- 2026-10-28: the grid reached the full 2.46M pool, so the comparison with the published
+  BART-Large EXR baseline is now matched on training set size. Item 1 of section 9 was
+  written on the assumption that it never would be and is amended above rather than
+  deleted: the data-budget objection is discharged, the architecture objection (item 4)
+  stands, and no state-of-the-art claim is made. Our pool is 2,456,443 against the
+  published 2,456,446; the 3 missing rows duplicate an evaluation utterance exactly and
+  are dropped from training, not from the evaluation splits, so the splits stay as
+  published.
+- 2026-10-28: the cafe grid completed and did **not** replicate the format effect. Every
+  cell, across both arms and all four pool sizes, falls between 0.939 and 0.980 exact
+  match; the headline gap is -0.007, against a 49 case test split where one utterance is
+  worth 0.020 and the determinism replicate reads 0.020 exactly. All 12 matched pairs fall
+  inside the paired bootstrap interval. The task is saturated, so it is reported as a
+  negative result that bounds the claim rather than as a replication, and no arm is marked
+  best in its table. No LFM2.5 cafe grid was run: a second saturated grid would add no
+  information. Settling the question on cafe orders requires a larger and harder held-out
+  set drawn from real transcripts, which does not exist yet.
+- 2026-10-28: published reference points moved from `report.py` onto the task that owns
+  them, because the cafe report was quoting PIZZA's BART-Large, PCFG and BERT baselines
+  underneath cafe numbers. The report also titles itself from the task label now.
+- 2026-10-27: generation provenance is now written into every `metrics.json`
+  (`padding_side`, EOS token and id, vocabulary size, the resolved prompt). An LFM2.5 grid
+  was first run with right padding, which places pad tokens between the prompt and the
+  continuation, and scored 0.13 to 0.20 lower exact match on every arm with nothing on disk
+  to explain the difference. The affected runs were discarded and re-run with left padding;
+  the discarded set is kept out of the reported results. The arm ordering was unchanged by
+  the bug, which is reported as a robustness observation rather than a result.

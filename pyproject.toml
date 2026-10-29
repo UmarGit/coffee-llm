@@ -10,7 +10,9 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # PIZZA benchmark (CC-BY-NC-4.0 data; never used by the production parser).
-pizza = ["anytree>=2.12", "matplotlib>=3.8"]
+# regex (not re) for the tokenizer split pattern's Unicode classes, used by
+# paper/make_tokenization.py to measure subword boundaries without torch.
+pizza = ["anytree>=2.12", "matplotlib>=3.8", "regex>=2024.0"]
 
 [dependency-groups]
 # GPU-only, installed on the server with: uv sync --group gpu

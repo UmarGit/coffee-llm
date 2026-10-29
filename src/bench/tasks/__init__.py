@@ -82,6 +82,15 @@ class Task:
     write_grammar: Callable[..., None] | None = None
     """(path) -> None, for a task with a constrained-decoding grammar."""
 
+    published: tuple = ()
+    """((system, test_em), ...) from the literature, for context only. Empty for a
+    task with no published numbers, which is most of them; the report then omits
+    the section rather than quoting another task's baselines."""
+
+    published_train_n: int = 0
+    """Training set size those published numbers used, so the report can say how
+    far from like-for-like the comparison is."""
+
     negatives: object = None
     """A module with mix/target/eval_rows/score for training on inputs that are
     not orders (see tasks/pizza/negatives.py). None means the task has none."""

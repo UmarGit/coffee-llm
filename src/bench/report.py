@@ -18,8 +18,6 @@ COLORS = {
     "dsl": "#e15759",
     "words": "#b07aa1",
 }
-PUBLISHED = {"BART-Large EXR": 0.7856, "PCFG": 0.6802, "BERT pipeline": 0.6408}
-PUBLISHED_TRAIN_N = 2_456_446
 
 
 def chosen_lrs():
@@ -41,7 +39,9 @@ def primary_runs(cfg_sizes=None):
     from .config import Config
 
     lrs = chosen_lrs()
-    sizes = set(cfg_sizes or Config().sizes)
+    # for_active(), not Config(): the bare dataclass defaults are empty now and the
+    # real sizes come from the selected task, so Config().sizes would reject every run.
+    sizes = set(cfg_sizes or Config.for_active().sizes)
     out = []
     for r in load_runs():
         if any(k not in r for k in REQUIRED_KEYS):
@@ -405,8 +405,9 @@ def build(out_dir=None, split="test"):
 
     fig_em_vs_tokens(runs, split, figs)
 
+    task = active_task()
     lines = [
-        "# PIZZA output-length study: results",
+        f"# {task.label} output-length study: results",
         "",
         f"Built from {len(runs)} completed grid runs in `{model_task_dir()}`. Every number here is",
         "recomputable with `python -m bench report`. Protocol: `PROTOCOL.md`.",
@@ -484,18 +485,24 @@ def build(out_dir=None, split="test"):
             ["arm", "em", "parse_validity", "em_given_valid", "mean_generated_tokens"],
         ),
         "",
-        "## Published reference points",
-        "",
-        f"Trained on {PUBLISHED_TRAIN_N:,} utterances, against at most "
-        f"{max(r['size'] for r in runs):,} here. Not a like-for-like comparison, and not",
-        "claimed as one. See PROTOCOL.md section 9.",
-        "",
-        render(
-            [{"system": k, "test_em": v} for k, v in PUBLISHED.items()],
-            ["system", "test_em"],
-        ),
-        "",
     ]
+    # Only for a task that has published numbers. Quoting another task's baselines
+    # here is how a cafe report ends up carrying PIZZA's.
+    if task.published:
+        lines += [
+            "## Published reference points",
+            "",
+            f"Trained on {task.published_train_n:,} utterances, against at most "
+            f"{max(r['size'] for r in runs):,} here. Not a like-for-like comparison, "
+            "and not",
+            "claimed as one. See PROTOCOL.md section 9.",
+            "",
+            render(
+                [{"system": k, "test_em": v} for k, v in task.published],
+                ["system", "test_em"],
+            ),
+            "",
+        ]
     out.mkdir(parents=True, exist_ok=True)
     (out / "summary.md").write_text("\n".join(lines))
     return {"runs": len(runs), "out": str(out)}

@@ -222,3 +222,21 @@ def test_the_cafe_task_uses_only_the_standard_library():
             if m and m.group(1).split(".")[0] in third_party:
                 offenders.append(f"{path.name}: {line.strip()}")
     assert not offenders, offenders
+
+
+def test_config_for_active_is_what_the_report_filters_on():
+    """`Config()` has empty defaults now; the real sizes come from the task.
+
+    report.primary_runs() filtered on `Config().sizes`, which silently became the
+    empty set after the registry refactor, so every run was rejected and the
+    report said "no completed grid runs" with 90 complete runs on disk.
+    """
+    config.select("qwen", "pizza")
+    assert config.Config().sizes == (), "bare defaults are intentionally empty"
+    assert config.Config.for_active().sizes == tasks.get("pizza").default_sizes
+
+    from bench import report
+    import inspect
+    src = inspect.getsource(report.primary_runs)
+    assert "Config.for_active()" in src, \
+        "primary_runs must take sizes from the selected task, not the bare dataclass"

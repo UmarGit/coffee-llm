@@ -113,6 +113,12 @@ TASK = Task(
     checks=_checks,
     write_grammar=lambda path: grammar.write_gbnf(path),
     negatives=negatives,
+    published=(
+        ("BART-Large EXR", 0.7856),
+        ("PCFG", 0.6802),
+        ("BERT pipeline", 0.6408),
+    ),
+    published_train_n=2_456_446,
 )
 
 __all__ = [

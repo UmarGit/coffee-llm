@@ -262,6 +262,17 @@ def train_one(
     trainer.train()
     stopper.restore()
 
+    # The generation contract, recorded because changing any of it silently moves
+    # every number. padding_side is the sharp one: right padding puts pad tokens
+    # between the prompt and the continuation and cost 0.13 to 0.20 exact match on
+    # a full LFM2 grid before it was caught, with nothing on disk to say why.
+    tok_info = {
+        "padding_side": getattr(tok, "padding_side", None),
+        "eos_token": active_model().eos,
+        "eos_id": tok.convert_tokens_to_ids(active_model().eos),
+        "vocab_size": len(tok),
+        "prompt": fmt,
+    }
     metrics_out = {
         "run_id": rid,
         "stage": stage,
@@ -271,6 +282,7 @@ def train_one(
         "seed": seed,
         "lr": lr,
         "cap": cap,
+        "tokenizer": tok_info,
         "best_step": stopper.best[1],
         # The selection score is dev EM, or with negatives the mean of dev EM and
         # negatives handled; dev EM itself is recorded either way.

@@ -249,6 +249,7 @@ dev = [
 pizza = [
     { name = "anytree" },
     { name = "matplotlib" },
+    { name = "regex" },
 ]
 
 [package.dev-dependencies]
@@ -269,6 +270,7 @@ requires-dist = [
     { name = "anytree", marker = "extra == 'pizza'", specifier = ">=2.12" },
     { name = "matplotlib", marker = "extra == 'pizza'", specifier = ">=3.8" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "regex", marker = "extra == 'pizza'", specifier = ">=2024.0" },
 ]
 provides-extras = ["dev", "pizza"]
 

@@ -2,8 +2,17 @@
 
 **Output format design for small language models in real time order parsing.**
 
-Umar Ahmed, Maxim Duanev. Paper source in [paper/](paper/), pre-registered protocol in
-[PROTOCOL.md](PROTOCOL.md).
+**Authors**
+
+- Umar Ahmed, ITMO University · ORCID [0009-0003-6040-6328](https://orcid.org/0009-0003-6040-6328)
+- Maxim Duanev, ITMO University · ORCID [0009-0009-2988-9839](https://orcid.org/0009-0009-2988-9839)
+- Mohammad Nour Al Awad, ITMO University · ORCID [0009-0008-5078-9800](https://orcid.org/0009-0008-5078-9800)
+- Sergey Ivanov, ITMO University · ORCID [0000-0002-1128-2942](https://orcid.org/0000-0002-1128-2942)
+- Ivan V. Khodnenko, ITMO University · ORCID [0009-0003-7787-7126](https://orcid.org/0009-0003-7787-7126)
+
+IDM (Intelligent Decision Making) Lab, ITMO University.
+
+Paper source in [paper/](paper/), pre-registered protocol in [PROTOCOL.md](PROTOCOL.md).
 
 A small language model is cheap to fine tune and fast to serve, but it hallucinates, and in
 a structured output setting a hallucination is not an obviously broken string. It is a well

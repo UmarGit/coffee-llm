@@ -52,6 +52,15 @@
   flow/.style={-{Stealth[length=3pt,width=3pt]},draw=cMuted,line width=0.6pt},
 }
 
+% A second row of author blocks; IEEEtran otherwise sets every \and on one line.
+\makeatletter
+\newcommand{\linebreakand}{%
+  \end{@IEEEauthorhalign}
+  \hfill\mbox{}\par
+  \mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
 \begin{document}
 
 \title{Fewer Tokens, Fewer Silent Errors:\\
@@ -61,11 +70,28 @@ in Real Time Order Parsing}
 \author{
 \IEEEauthorblockN{Umar Ahmed}
 \IEEEauthorblockA{\textit{ITMO University}\\
+ORCID: 0009-0003-6040-6328\\
 uakhmed@itmo.ru}
 \and
 \IEEEauthorblockN{Maxim Duanev}
 \IEEEauthorblockA{\textit{ITMO University}\\
+ORCID: 0009-0009-2988-9839\\
 mduanev@itmo.ru}
+\and
+\IEEEauthorblockN{Mohammad Nour Al Awad}
+\IEEEauthorblockA{\textit{ITMO University}\\
+ORCID: 0009-0008-5078-9800\\
+MohammadNourAlAwad@itmo.ru}
+\linebreakand
+\IEEEauthorblockN{Sergey Ivanov}
+\IEEEauthorblockA{\textit{ITMO University}\\
+ORCID: 0000-0002-1128-2942\\
+svivanov@itmo.ru}
+\and
+\IEEEauthorblockN{Ivan V. Khodnenko}
+\IEEEauthorblockA{\textit{ITMO University}\\
+ORCID: 0009-0003-7787-7126\\
+ivan.khodnenko@itmo.ru}
 }
 
 \maketitle

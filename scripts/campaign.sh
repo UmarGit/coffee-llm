@@ -4,6 +4,7 @@
 #
 #   ./scripts/tmux.sh campaign neg-v1 --negatives 0.3 --corrections 0.1
 #   ./scripts/tmux.sh campaign neg-v1 --pilot          # tiny end-to-end check first
+#   GPU_IDS=0,2 ./scripts/tmux.sh campaign neg-v1 ...  # only those cards, default all
 #
 # or directly:
 #
@@ -58,13 +59,24 @@ export TOKENIZERS_PARALLELISM=false PYTORCH_CUDA_ALLOC_CONF=expandable_segments:
 PY=(uv run --extra pizza --group gpu python)
 SHARDS="$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ' || true)"
 [ "${SHARDS:-0}" -gt 0 ] || SHARDS=1
+FIRST_GPU=0
+if [ -n "${GPU_IDS:-}" ]; then
+  IFS=, read -r -a GPU_LIST <<<"$GPU_IDS"
+  # An out of range CUDA_VISIBLE_DEVICES silently falls back to CPU.
+  for g in "${GPU_LIST[@]}"; do
+    nvidia-smi -L 2>/dev/null | grep -q "^GPU $g:" || {
+      echo "GPU_IDS=$GPU_IDS: this machine has no GPU $g" >&2; exit 1; }
+  done
+  SHARDS="${#GPU_LIST[@]}"
+  FIRST_GPU="${GPU_LIST[0]}"
+fi
 
 say() { printf '\n######## %s  %s\n' "$1" "$(date +%H:%M:%S)"; }
 do_() {
   if [ "$DRY" -eq 1 ]; then echo "  $*"; else "$@"; fi
 }
 
-say "campaign $NAME  ->  $DIR  (models $MODELS, $SHARDS GPU(s))"
+say "campaign $NAME  ->  $DIR  (models $MODELS, $SHARDS GPU(s)${GPU_IDS:+: $GPU_IDS})"
 echo "flags: ${FLAGS[*]:-(none)}"
 if [ "$DRY" -eq 1 ]; then
   echo "  ${PY[*]} -m bench.campaign manifest $DIR $NAME $MODELS ${FLAGS[*]:-}"
@@ -97,7 +109,7 @@ for pair in "${EXPORT_LIST[@]}"; do
   if [ "$DRY" -eq 1 ]; then
     echo "  ${PY[*]} -m bench export --model $model --task pizza --arm $arm --size $size --seed 0 --verify $VERIFY ${FLAGS[*]:-}"
   else
-    CUDA_VISIBLE_DEVICES=0 "${PY[@]}" -m bench export --model "$model" --task pizza \
+    CUDA_VISIBLE_DEVICES="$FIRST_GPU" "${PY[@]}" -m bench export --model "$model" --task pizza \
       --arm "$arm" --size "$size" --seed 0 --verify "$VERIFY" ${FLAGS[@]+"${FLAGS[@]}"} \
       2>&1 | tee "$DIR/$model/pizza/logs/export-$arm.log"
     [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "FAILED: export $model $arm" >&2; exit 1; }

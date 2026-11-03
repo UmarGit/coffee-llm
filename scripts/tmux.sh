@@ -27,8 +27,9 @@
 #
 #   ./scripts/tmux.sh campaign neg-v1 --pilot
 #   ./scripts/tmux.sh campaign neg-v1 --negatives 0.3 --corrections 0.1
+#   GPU_IDS=0,2 ./scripts/tmux.sh campaign neg-v1 ...   only those cards
 #
-#   ./scripts/tmux.sh tail         follow every shard log
+#   ./scripts/tmux.sh tail        follow every shard log
 #   ./scripts/tmux.sh status       which sessions are alive and how far along
 #   ./scripts/tmux.sh stop         kill every session this script started
 #
@@ -127,7 +128,7 @@ case "$STAGE" in
     mkdir -p "$LOGS"
     LOG="$LOGS/campaign-${CNAME}.log"
     tmux new-session -d -s "$NAME" \
-      "cd '$REPO' && ./scripts/campaign.sh '$CNAME' $* 2>&1 | tee -a '$LOG'; \
+      "cd '$REPO' && GPU_IDS='${GPU_IDS:-}' ./scripts/campaign.sh '$CNAME' $* 2>&1 | tee -a '$LOG'; \
        echo; echo '--- finished, press enter ---'; read"
     echo "started $NAME"
     echo

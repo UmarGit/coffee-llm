@@ -294,3 +294,7 @@ re-verified for every subset and seed by the `check` stage.
   to explain the difference. The affected runs were discarded and re-run with left padding;
   the discarded set is kept out of the reported results. The arm ordering was unchanged by
   the bug, which is reported as a robustness observation rather than a result.
+- 2026-11-03: the `neg-v1` campaign runs five seeds per grid cell (0 to 4) instead of the three
+  in section 4, to narrow the confidence intervals over seeds. The learning rate is still
+  selected on seeds 0, 1 and 2, so those sweep runs remain grid cells and seeds 3 and 4 play
+  no part in the choice. Every seed is still reported. Earlier three-seed results are unchanged.

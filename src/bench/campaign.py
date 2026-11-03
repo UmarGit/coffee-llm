@@ -62,7 +62,7 @@ def manifest(root, name, models, flags):
         "arms": list(cfg.arms), "sizes": list(cfg.sizes), "seeds": list(cfg.seeds),
         "negatives": cfg.negatives, "corrections": cfg.corrections,
         "version": _version(), "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "gpus": _gpus(), "eval_limit": int(os.environ.get("BENCH_EVAL_LIMIT") or 0),
+        "gpus": _gpus(), "gpu_ids": os.environ.get("GPU_IDS") or None, "eval_limit": int(os.environ.get("BENCH_EVAL_LIMIT") or 0),
     }
     path.write_text(json.dumps(data, indent=2))
     print(f"wrote {path}")

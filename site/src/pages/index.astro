@@ -99,8 +99,8 @@ const race = {
             </h1>
             <p class="sub fade-up">
               A tiny AI reads pizza orders. Sometimes its answer looks perfect and
-              is still wrong, and nothing catches it. Scroll to see why, and the
-              surprisingly simple fix.
+              is still wrong, and nothing catches it. Scroll to see why, and a
+              surprisingly simple way to halve it.
             </p>
           </div>
           <div class="live fade-up" data-mode="demo">
@@ -159,14 +159,14 @@ const race = {
             <article class="step model-card">
               <span class="step-n">02 · the model writes</span>
               <div class="screen">
-                <div class="screen-bar"><span></span><span></span><span></span><b>0.8B</b></div>
+                <div class="screen-bar"><span></span><span></span><span></span><b>0.8B · symbols format</b></div>
                 <span class="toks">
                   {h.tokens.filter((t) => t.replace(/^·/, "")).map((t, i) => (
                     <span class={`tk ${t.startsWith("·") ? "sp" : ""}`} style={`--i:${i}`}>{t.replace(/^·/, "")}</span>
                   ))}<span class="caret" aria-hidden="true"></span>
                 </span>
               </div>
-              <span class="step-foot">{h.tokens.length} tokens, one at a time</span>
+              <span class="step-foot">{h.tokens.length} tokens in the symbols format, one at a time</span>
             </article>
             <div class="wire" aria-hidden="true"><i></i></div>
             <article class="step ticket-card">
@@ -360,41 +360,10 @@ const race = {
         <script type="application/json" id="game-data" is:inline set:html={JSON.stringify(picked.game)} />
       </section>
 
-      <!-- 4c · The guardrail -->
-      <section id="gate" class="plain gate-sec" data-label="Guardrail" data-tint="red"
-        data-gate={JSON.stringify(gate)}>
-        <p class="kicker fade-up">The guardrail</p>
-        <h2 class="big" data-reveal>Only the menu gets in.</h2>
-        <p class="lead fade-up">
-          People type anything into a demo. So the live model was retrained to
-          parse orders from the menu and answer <code>?</code> to everything else:
-          gibberish, chatter, horses, and orders with anything extra in them.
-        </p>
-        <div class="gate fade-up" aria-label="Inputs flowing toward the model: menu orders pass, everything else is refused">
-          <div class="gate-lane"></div>
-          <div class="gate-door" aria-hidden="true"><span>model</span></div>
-          <div class="gate-tally">
-            <span class="g-in"><b>0</b> parsed</span>
-            <span class="g-out"><b>0</b> refused with ?</span>
-          </div>
-        </div>
-        <div class="gate-stats">
-          <div><b data-count={pct0(G.handled_junk)} data-dec="0">0</b><span>of gibberish refused</span></div>
-          <div><b data-count={pct0(G.handled)} data-dec="0">0</b><span>of nonsense it never saw, refused</span></div>
-          <div><b>{guard.probes.length}/{guard.probes.length}</b><span>demo-style prompts refused</span></div>
-          <div class="cost"><b data-count={(G.false_reject_on_test * 100).toFixed(1)} data-dec="1">0</b><span>of real orders refused too: the price of strictness</span></div>
-        </div>
-        <p class="fine-print fade-up">
-          Refusals shown are the run's real outputs on its challenge prompts;
-          accepted orders are real PIZZA test orders, passing at the measured rate.
-          The paper's numbers above come from models trained without this guardrail.
-        </p>
-      </section>
-
       <!-- 5 · Speed -->
       <section id="race" class="plain" data-label="Speed" data-tint="blue"
         data-race={JSON.stringify(race)}>
-        <h2 class="big" data-reveal>And it's {speedup}× faster.</h2>
+        <h2 class="big" data-reveal>Words are also {speedup}× faster.</h2>
         <p class="lead fade-up">Fewer tokens to write means less waiting. Shown at half speed.</p>
         <div class="lanes">
           <div class="lane" data-lane="exr" style="--fc: var(--c-exr)">
@@ -432,12 +401,47 @@ const race = {
 
       <!-- 7 · Café -->
       <section id="cafe" class="plain cafe" data-label="Café" data-tint="amber">
-        <p class="kicker fade-up">So we built a café ordering system with it</p>
+        <p class="kicker fade-up">It started in a café</p>
         <!-- Paper, coffee section: median 80 ms on an Apple M1; exact match 0.980. -->
         <p class="giant"><b data-count="80" data-dec="0">0</b><span>ms</span></p>
         <p class="lead fade-up">
-          per order, on an ordinary laptop. No cloud, no GPU farm, and
-          <b><span data-count="98" data-dec="0">0</span>%</b> of coffee orders exactly right.
+          per order, on an ordinary laptop: the café parser this study grew out
+          of. No cloud, no GPU farm, and
+          <b><span data-count="98" data-dec="0">0</span>%</b> of coffee orders
+          exactly right. Its tickets carry a <code>?</code> for anything not on
+          the menu, and putting the pizza model online showed it needed one too.
+        </p>
+      </section>
+
+      <!-- 8 · The guardrail -->
+      <section id="gate" class="plain gate-sec" data-label="Guardrail" data-tint="red"
+        data-gate={JSON.stringify(gate)}>
+        <p class="kicker fade-up">The guardrail</p>
+        <h2 class="big" data-reveal>Only the menu gets in.</h2>
+        <p class="lead fade-up">
+          People type anything into a demo, so the live pizza model learned the
+          café parser's trick: parse orders from the menu and answer
+          <code>?</code> to everything else, from gibberish and chatter to horses
+          and orders with anything extra in them.
+        </p>
+        <div class="gate fade-up" aria-label="Inputs flowing toward the model: menu orders pass, everything else is refused">
+          <div class="gate-lane"></div>
+          <div class="gate-door" aria-hidden="true"><span>model</span></div>
+          <div class="gate-tally">
+            <span class="g-in"><b>0</b> parsed</span>
+            <span class="g-out"><b>0</b> refused with ?</span>
+          </div>
+        </div>
+        <div class="gate-stats">
+          <div><b data-count={pct0(G.handled_junk)} data-dec="0">0</b><span>of gibberish refused</span></div>
+          <div><b data-count={pct0(G.handled)} data-dec="0">0</b><span>of nonsense it never saw, refused</span></div>
+          <div><b>{guard.probes.length}/{guard.probes.length}</b><span>demo-style prompts refused</span></div>
+          <div class="cost"><b data-count={(G.false_reject_on_test * 100).toFixed(1)} data-dec="1">0</b><span>of real orders refused too: the price of strictness</span></div>
+        </div>
+        <p class="fine-print fade-up">
+          Refusals shown are the run's real outputs on its challenge prompts;
+          accepted orders are real PIZZA test orders, passing at the measured rate.
+          The paper's numbers above come from models trained without this guardrail.
         </p>
       </section>
 
@@ -481,9 +485,10 @@ const race = {
           <p class="cr-fine">
             {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
             benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
-            three seeds each. Every number on the page comes from those runs; the
-            live demo runs a stricter variant ({model.run_id}) trained to refuse
-            anything that is not a menu order. PIZZA is CC-BY-NC-4.0, so this site
+            three seeds each: every format number on the page comes from those
+            runs. The café figures come from the café parser, and the guardrail
+            figures and the live demo from a stricter variant ({model.run_id})
+            trained to refuse anything that is not a menu order. PIZZA is CC-BY-NC-4.0, so this site
             and the models derived from it are for non-commercial research use.
           </p>
         </footer>

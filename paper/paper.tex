@@ -116,9 +116,9 @@ that parse cleanly but are wrong. We argue this last quantity, which we call the
 \emph{silent error rate}, is the right objective for deploying small models. The
 matched-pair result replicates on \replLabel{}, whose vocabulary is four times
 smaller, where the word based encoding costs \emph{more} tokens than its
-symbolic twin and is still the more accurate of the two. We report a café
-ordering system built on the finding that runs at 80\,ms per order on a
-consumer laptop.
+symbolic twin and is still the more accurate of the two. The study grew out of
+a deployed café ordering parser that runs at 80\,ms per order on a consumer
+laptop, whose own small test set is too saturated to separate formats.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -800,8 +800,8 @@ their absolute scores to any one of those.
 
 \section{Conclusion}
 
-Output format is a free design variable that changes hallucination rate and
-latency by factors of three to four. The intuition that fewer tokens is safer is
+Output format is a free design variable that changes silent errors,
+hallucinations and latency by factors of two to four. The intuition that fewer tokens is safer is
 not quite right. What helps is compressing structure while keeping the surface
 in natural words, and what matters for deployment is not overall accuracy but
 how often a model is wrong in a way nobody can detect. The ordering survives a

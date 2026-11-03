@@ -15,11 +15,11 @@
   },
   "dependencies": {
     "@wllama/wllama": "^3.8.1",
-    "astro": "^5.4.0",
+    "astro": "^7.4.4",
     "coi-serviceworker": "^0.1.7"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
+    "@astrojs/check": "^0.9.12",
     "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
     "typescript": "^5.7.3"

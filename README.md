@@ -178,7 +178,7 @@ test generalisation. Current: **48/49 (98%)**.
 Forty-nine cases is too few to compare formats on. One case is worth 2.0 points, which is
 also what the determinism replicate reads, so the completed café grid puts both arms
 between 0.939 and 0.980 at every pool size and separates neither. It measures that the
-shipped parser works, not which encoding is better; see TASK.md item 5.
+shipped parser works, not which encoding is better; see the café section of the paper.
 
 Two ways to measure the model, each on the path it actually describes:
 
@@ -336,7 +336,7 @@ and warns above 1%.
 
 The server has no `rsync`, so both transfer scripts use tar over ssh, needing only `ssh`,
 `tar` and `gzip`. `push_code.sh` sends an explicit allow list (`src`, `scripts`, `tests`,
-`Makefile`, `PROTOCOL.md`, `TASK.md`, `pyproject.toml`, `README.md`, `uv.lock`) and never
+`Makefile`, `PROTOCOL.md`, `pyproject.toml`, `README.md`, `uv.lock`) and never
 touches `runs/` or `data/` on the server. Both take `--list` to show what would move
 without moving it.
 

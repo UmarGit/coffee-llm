@@ -341,6 +341,22 @@ def test_fewshot_prompt_is_chat_turns():
     assert p.count(EOS) == 2 + 3  # two answers plus three user-turn terminators
 
 
+def test_fewshot_prompt_keeps_bos_only_at_the_start():
+    """LFM2 attends to nothing before a mid-sequence BOS, which hides every shot."""
+    from bench.__main__ import fewshot_prompt
+
+    shots = [
+        {
+            "src": "one ham pizza",
+            "exr": "(ORDER (PIZZAORDER (NUMBER 1 ) (TOPPING HAM ) ) )",
+        }
+    ]
+    fmt = "<|startoftext|>user {} assistant "
+    p = fewshot_prompt(shots * 3, "dsl", "x", fmt, "<|startoftext|>")
+    assert p.startswith("<|startoftext|>user") and p.count("<|startoftext|>") == 1
+    assert p.count("user ") == 4
+
+
 def test_fewshot_prompt_uses_the_arm_format():
     from bench.__main__ import fewshot_prompt
 

@@ -492,20 +492,26 @@ def stage_test(args):
     return 0
 
 
-def fewshot_prompt(shots, arm, src, fmt):
+def fewshot_prompt(shots, arm, src, fmt, bos=None):
     """Lay the shots out as real chat turns, identical to the SFT training format.
 
     Putting all the examples inside one user turn makes a chat-tuned base model answer
     conversationally ("Here is the breakdown of your order"), because it never sees an
     assistant turn containing the target format. Chaining complete turns fixes that and
     keeps this condition comparable with the fine-tuned runs, which use the same template.
+
+    A BOS token is kept only at the very start. LFM2 attends to nothing before a
+    mid-sequence <|startoftext|>, so repeating it per turn hides every shot.
     """
     t, eos = active_task(), active_model().eos
     parts = []
     for r in shots:
         parts.append(fmt.format(t.source(r)) + t.target(r, arm) + eos + "\n")
     parts.append(fmt.format(src))
-    return "".join(parts)
+    prompt = "".join(parts)
+    if bos and prompt.startswith(bos):
+        prompt = bos + prompt[len(bos) :].replace(bos, "")
+    return prompt
 
 
 def stage_fewshot(args):
@@ -527,7 +533,7 @@ def stage_fewshot(args):
     rows = splits["dev"][: args.limit]
     failed, summary = [], {}
     for arm in cfg.arms:
-        prompts = [fewshot_prompt(shots, arm, t.source(r), fmt) for r in rows]
+        prompts = [fewshot_prompt(shots, arm, t.source(r), fmt, tok.bos_token) for r in rows]
         texts, counts = evaluate.generate_from_prompts(
             model, tok, prompts, cfg.caps[arm], cfg.gen_batch_size
         )
@@ -551,8 +557,8 @@ def stage_fewshot(args):
         )
         if res["parse_validity"] == 0.0:
             failed.append(arm)
-            for t in texts[:3]:
-                print(f"      raw: {t[:110]!r}")
+            for text in texts[:3]:
+                print(f"      raw: {text[:110]!r}")
     (out_dir / "metrics.json").write_text(
         json.dumps(
             {

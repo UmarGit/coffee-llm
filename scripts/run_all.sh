@@ -12,7 +12,7 @@
 # Extra bench args after `--` go to every stage. BENCH_RUNS moves the run
 # directory (default runs/). With STAGES_DIR set, each finished stage leaves
 # <model>.<stage>.done there and is skipped next time. DRY_RUN=1 prints the
-# commands instead of running them.
+# commands instead of running them. GPU_IDS=0,2 uses only those cards.
 set -euo pipefail
 
 MODEL="${1:?usage: run_all.sh <model> <task> [shards] [-- bench args]}"
@@ -29,6 +29,16 @@ cd "$REPO"
 if [ -z "$SHARDS" ]; then
   SHARDS="$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')"
   [ "$SHARDS" = "0" ] && SHARDS=1
+fi
+
+# GPU_IDS=0,2 picks the physical cards and sets the shard count. Without it the
+# shards take cards 0 to SHARDS-1.
+if [ -n "${GPU_IDS:-}" ]; then
+  IFS=, read -r -a GPU_LIST <<<"$GPU_IDS"
+  SHARDS="${#GPU_LIST[@]}"
+else
+  GPU_LIST=()
+  for ((i = 0; i < SHARDS; i++)); do GPU_LIST+=("$i"); done
 fi
 
 RUNS="${BENCH_RUNS:-runs}"
@@ -53,8 +63,8 @@ run() {
 fan_out() {
   local stage="$1" pids=() i rc=0
   for ((i = 0; i < SHARDS; i++)); do
-    say "$stage shard $i/$SHARDS"
-    CUDA_VISIBLE_DEVICES="$i" run "$LOGS/$stage.$i.log" "${BENCH[@]}" "$stage" \
+    say "$stage shard $i/$SHARDS on GPU ${GPU_LIST[$i]}"
+    CUDA_VISIBLE_DEVICES="${GPU_LIST[$i]}" run "$LOGS/$stage.$i.log" "${BENCH[@]}" "$stage" \
       --model "$MODEL" --task "$TASK" --shard "$i/$SHARDS" ${EXTRA[@]+"${EXTRA[@]}"} &
     pids+=($!)
   done
@@ -68,7 +78,7 @@ fan_out() {
 one() {
   local stage="$1" log="${2:-$1}"; shift $(( $# < 2 ? $# : 2 ))
   say "$log"
-  CUDA_VISIBLE_DEVICES=0 run "$LOGS/$log.log" "${BENCH[@]}" "$stage" \
+  CUDA_VISIBLE_DEVICES="${GPU_LIST[0]}" run "$LOGS/$log.log" "${BENCH[@]}" "$stage" \
     --model "$MODEL" --task "$TASK" "$@" ${EXTRA[@]+"${EXTRA[@]}"} || {
       echo "FAILED: $log (see $LOGS/$log.log)" >&2; exit 1; }
 }
@@ -89,8 +99,8 @@ step() {
 }
 
 printf '%s\n' "----------------------------------------------------------------"
-printf 'model   %s\ntask    %s\nshards  %s\nruns    %s\nargs    %s\n' \
-       "$MODEL" "$TASK" "$SHARDS" "$RUNS" "${EXTRA[*]:-(none)}"
+printf 'model   %s\ntask    %s\nshards  %s\ngpus    %s\nruns    %s\nargs    %s\n' \
+       "$MODEL" "$TASK" "$SHARDS" "${GPU_LIST[*]}" "$RUNS" "${EXTRA[*]:-(none)}"
 printf '%s\n' "----------------------------------------------------------------"
 
 # Data and gates first: `check` is the one stage whose failure must stop

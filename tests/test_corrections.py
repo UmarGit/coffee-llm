@@ -130,3 +130,9 @@ def test_scoring_separates_exact_and_applied():
     assert em == [True, False, False]
     assert res["em_swap"] == 0.5 and res["applied_swap"] == 1.0
     assert res["refused"] == pytest.approx(1 / 3)
+
+
+def test_applied_survives_a_tree_that_breaks_the_grammar():
+    # Seen mid-training: it parses, but a COMPLEX_TOPPING has no QUANTITY.
+    pred = "(ORDER (PIZZAORDER (NUMBER 1 ) (COMPLEX_TOPPING (TOPPING HAM ) ) ) )"
+    assert corrections.applied(pred, {"must": ["p TOPPING HAM"], "must_not": []}) is False

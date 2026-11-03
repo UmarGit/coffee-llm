@@ -87,7 +87,8 @@ if ! "${SSH[@]}" "$HOST" "test -d \$HOME/$REMOTE"; then
 fi
 
 echo "sending $COUNT files to $HOST:$REMOTE/"
-printf '%s\n' "$LIST" | tar czf - -T - | "${SSH[@]}" "$HOST" "tar xzf - -C \$HOME/$REMOTE"
+# COPYFILE_DISABLE stops macOS tar adding ._ resource files.
+printf '%s\n' "$LIST" | COPYFILE_DISABLE=1 tar czf - -T - | "${SSH[@]}" "$HOST" "tar xzf - -C \$HOME/$REMOTE"
 
 echo
 echo "=== verifying on the server ==="

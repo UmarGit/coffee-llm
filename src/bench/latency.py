@@ -15,6 +15,7 @@ import time
 from . import evaluate
 from .config import model as active_model
 from .config import model_task_dir, run_dir
+from .config import task as active_task
 
 
 def results_path():
@@ -170,11 +171,11 @@ def measure(model, tok, rows, arm, cap, warmup=5):
     import torch
 
     for r in rows[:warmup]:
-        evaluate.generate(model, tok, [r["src"]], cap, batch_size=1)
+        evaluate.generate(model, tok, [active_task().source(r)], cap, batch_size=1)
     times, counts, outs = [], [], []
     for r in rows:
         t0 = time.perf_counter()
-        texts, n = evaluate.generate(model, tok, [r["src"]], cap, batch_size=1)
+        texts, n = evaluate.generate(model, tok, [active_task().source(r)], cap, batch_size=1)
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         times.append((time.perf_counter() - t0) * 1000)
@@ -203,7 +204,6 @@ def measure(model, tok, rows, arm, cap, warmup=5):
 
 def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
     import torch
-    from . import metrics
 
     rows = splits[split][:limit]
     cap = cfg.caps[arm]
@@ -220,8 +220,8 @@ def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
         model, tok = load_adapter(
             adapter, max_seq_length=cfg.max_seq_length, use_unsloth=use_unsloth
         )
-        res, outs, _ = measure(model, tok, rows, arm, cap)
-        acc, _, _ = metrics.evaluate(outs, [r["exr"] for r in rows], arm)
+        res, outs, counts = measure(model, tok, rows, arm, cap)
+        acc, _, _ = active_task().score(outs, rows, arm, n_tokens=counts, cap=cap)
         res.update(
             run_id=rid,
             split=split,

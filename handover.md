@@ -145,6 +145,11 @@ Proves the whole pipeline works before the big run. Results go to
 [server]  cat runs-neg-v1-pilot/bundle/summary.txt          # must end with ALL CHECKS PASSED
 ```
 
+A campaign uses every GPU on the machine. To use only some cards, put
+`GPU_IDS` in front of the command: `GPU_IDS=0,2 ./scripts/tmux.sh campaign ...`.
+The pilot and the full campaign share one tmux session name, so close the
+finished pilot first: `tmux kill-session -t bench-campaign-neg-v1`.
+
 ### 3.4 Full campaign (after the researchers approve the setup)
 
 Both models, every stage, a GGUF of WORDS for each model and a results bundle, in
@@ -162,6 +167,7 @@ Notes:
   `(R)` (short brackets), `{"reject":true}` (JSON).
 - A crashed or stopped campaign resumes when you run the same command again.
 - A campaign name is tied to its flags. To change the flags, use a new name.
+- The default is 3 seeds. For more, add `--seeds 0,1,2,3,4` from the first start.
 
 ## Part 4: pull the results to the user
 

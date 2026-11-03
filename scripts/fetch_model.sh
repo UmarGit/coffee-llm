@@ -51,7 +51,7 @@ QUANT="${ARGS[1]:-q8_0}"
 # The GGUF barely compresses, so compression only costs CPU; AES-GCM is the cheapest
 # cipher on hardware with AES instructions, which both ends have.
 SSH=(ssh -i "$KEY" -p "$PORT" -o Compression=no -c aes128-gcm@openssh.com,chacha20-poly1305@openssh.com)
-DIR="$REMOTE/models/$TASK"
+DIR="${MODELS_DIR:-$REMOTE/models/$TASK}"
 
 MANIFEST=$("${SSH[@]}" "$HOST" "ls -t \$HOME/$DIR/*.json 2>/dev/null | grep -F -- '${MATCH}' | head -1" || true)
 [ -n "$MANIFEST" ] || { echo "no manifest matching '${MATCH}' in $HOST:~/$DIR"; exit 1; }
@@ -86,8 +86,13 @@ read -r FILE BYTES SHA <<<"$INFO"
 [ "$CHECK_ONLY" -eq 1 ] && exit 0
 
 mkdir -p "$OUT"
-ARM=$(MANIFEST_JSON="$JSON" python3 -c 'import json, os; print(json.loads(os.environ["MANIFEST_JSON"])["arm"])')
-DEST="$OUT/$TASK-$ARM-$QUANT.gguf"
+read -r ARM BASE_MODEL < <(MANIFEST_JSON="$JSON" python3 -c 'import json, os; m = json.loads(os.environ["MANIFEST_JSON"]); print(m["arm"], m["model"])')
+# Qwen keeps the name the site loads; any other model gets its name in the file.
+if [ "$BASE_MODEL" = "qwen" ]; then
+  DEST="$OUT/$TASK-$ARM-$QUANT.gguf"
+else
+  DEST="$OUT/$TASK-$BASE_MODEL-$ARM-$QUANT.gguf"
+fi
 PART="$DEST.part"
 printf '%s' "$JSON" > "${DEST%.gguf}.json"
 

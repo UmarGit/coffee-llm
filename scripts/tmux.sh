@@ -22,6 +22,12 @@
 #   ./scripts/tmux.sh export qwen words pizza --fresh --negatives 0.15 --lr 0.0001
 #                                                     same, also trained to answer "?" to non-orders
 #
+# A whole campaign, both models, export and bundle, in its own runs-<name>/
+# (see scripts/campaign.sh):
+#
+#   ./scripts/tmux.sh campaign neg-v1 --pilot
+#   ./scripts/tmux.sh campaign neg-v1 --negatives 0.3 --corrections 0.1
+#
 #   ./scripts/tmux.sh tail         follow every shard log
 #   ./scripts/tmux.sh status       which sessions are alive and how far along
 #   ./scripts/tmux.sh stop         kill every session this script started
@@ -110,6 +116,25 @@ case "$STAGE" in
     echo "  stages:  tail -f runs/$MODEL/$TASK/logs/*.log"
     echo "  stop:    $0 stop"
     ;;
+  campaign)
+    CNAME="${2:?usage: $0 campaign <name> [--pilot] [bench flags]}"
+    shift 2
+    require_gpus 1
+    NAME="${PREFIX}-campaign-${CNAME}"
+    if tmux has-session -t "$NAME" 2>/dev/null; then
+      echo "$NAME already running; attach with: tmux attach -t $NAME"; exit 1
+    fi
+    mkdir -p "$LOGS"
+    LOG="$LOGS/campaign-${CNAME}.log"
+    tmux new-session -d -s "$NAME" \
+      "cd '$REPO' && ./scripts/campaign.sh '$CNAME' $* 2>&1 | tee -a '$LOG'; \
+       echo; echo '--- finished, press enter ---'; read"
+    echo "started $NAME"
+    echo
+    echo "  follow:  tmux attach -t $NAME        (detach with ctrl-b d)"
+    echo "  or:      tail -f $LOG"
+    echo "  status:  $0 status"
+    ;;
   sweep|grid|latency)
     launch "$STAGE" "${2:-$(gpu_count)}"
     ;;
@@ -155,7 +180,14 @@ case "$STAGE" in
   status)
     echo "sessions:"
     sessions | sed 's/^/  /' || echo "  none"
-    echo "complete runs: $(grep -l '"complete": true' runs/*/metrics.json 2>/dev/null | wc -l | tr -d ' ')"
+    echo "complete runs in runs/: $(grep -l '"complete": true' runs/*/*/*/metrics.json 2>/dev/null | wc -l | tr -d ' ')"
+    for c in runs-*/campaign.json; do
+      [ -f "$c" ] || continue
+      d="${c%/campaign.json}"
+      last=$(ls -t "$d"/stages/*.done 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || true)
+      echo "campaign ${d#runs-}: last stage ${last%.done}${last:+,} $(grep -l '"complete": true' "$d"/*/*/*/metrics.json 2>/dev/null | wc -l | tr -d ' ') complete runs"
+      [ -f "$d/bundle/summary.txt" ] && echo "  $(tail -1 "$d/bundle/summary.txt")"
+    done
     nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu \
       --format=csv,noheader 2>/dev/null | sed 's/^/  gpu /' || true
     ;;
@@ -169,7 +201,7 @@ case "$STAGE" in
     [ "$found" -eq 0 ] && echo "nothing to stop"
     ;;
   *)
-    sed -n '2,22p' "$0"
+    sed -n '2,28p' "$0"
     exit 1
     ;;
 esac

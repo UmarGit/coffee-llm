@@ -57,6 +57,12 @@ SEND=(src scripts tests Makefile PROTOCOL.md pyproject.toml README.md)
 [ -f "$REPO/TASK.md" ] && SEND+=(TASK.md)
 
 cd "$REPO"
+# The server has no .git, so the code version travels as a file: the commit and
+# whether the working tree differed from it.
+if git rev-parse HEAD >/dev/null 2>&1; then
+  { git rev-parse HEAD | tr -d '\n'; git diff --quiet HEAD -- "${SEND[@]}" || printf -- '-dirty'; echo; } > VERSION
+  SEND+=(VERSION)
+fi
 MISSING=()
 for f in "${SEND[@]}"; do [ -e "$f" ] || MISSING+=("$f"); done
 if [ ${#MISSING[@]} -gt 0 ]; then

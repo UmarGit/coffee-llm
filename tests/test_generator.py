@@ -1,7 +1,5 @@
-import json
 from pathlib import Path
 
-import pytest
 
 from bench.tasks.coffee import generator as g
 from bench.tasks.coffee.parsing import parse_compact

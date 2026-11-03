@@ -61,9 +61,23 @@ def test_whole_negatives_never_name_a_menu_item():
             assert negatives.on_menu(r["src"]) is None, r["src"]
 
 
-def test_bracketed_arms_are_refused():
+@pytest.mark.parametrize("arm", formats.ARMS)
+def test_every_arm_has_a_refusal_that_is_never_an_order(arm):
+    assert negatives.unsafe_rejects([arm]) == []
+    rows = [r for r in negatives.mix(ROWS, 0.3, 0, arm) if r.get("neg")]
+    assert {negatives.target(r, arm) for r in rows} == {negatives.REJECTS[arm]}
+
+
+def test_unknown_arm_is_refused():
     with pytest.raises(ValueError):
-        negatives.mix(ROWS, 0.2, 0, "exr")
+        negatives.mix(ROWS, 0.2, 0, "yaml")
+
+
+def test_refusal_is_scored_in_each_arms_own_spelling():
+    rows = [{"src": "hehe", "neg": "junk"}] * 2
+    res = negatives.score(["(REJECT )", "?"], rows, "exr",
+                          test_outputs=["(ORDER (PIZZAORDER (NUMBER 1 ) ) )", "(REJECT )"])
+    assert res["handled"] == 0.5 and res["false_reject_on_test"] == 0.5
 
 
 def test_scoring_is_strict():

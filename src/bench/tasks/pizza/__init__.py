@@ -7,7 +7,7 @@ never reimplemented.
 """
 
 from .. import Task
-from . import data, formats, grammar, ladder, metrics, negatives
+from . import corrections, data, formats, grammar, ladder, metrics, negatives
 from .formats import ARMS, LADDER_ARMS, MATCHED_PAIRS, decode, encode, parse_exr, to_exr
 
 
@@ -113,6 +113,7 @@ TASK = Task(
     checks=_checks,
     write_grammar=lambda path: grammar.write_gbnf(path),
     negatives=negatives,
+    corrections=corrections,
     published=(
         ("BART-Large EXR", 0.7856),
         ("PCFG", 0.6802),

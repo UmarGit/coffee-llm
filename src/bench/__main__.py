@@ -1,6 +1,7 @@
 """python -m bench <stage> [--model qwen|lfm2] [--task pizza|coffee] [options]
 
 Stages: prepare check smoke sweep grid test grammar fewshot latency report export
+        negatives corrections (score a saved run on the held-out sets)
 Every stage is resumable: runs with a complete metrics.json are skipped, and
 results live under runs/<model>/<task>/ so no two combinations collide.
 """
@@ -8,6 +9,7 @@ results live under runs/<model>/<task>/ so no two combinations collide.
 import argparse
 import json
 import math
+import os
 import statistics
 import sys
 from pathlib import Path
@@ -31,8 +33,11 @@ from .config import task as active_task
 
 
 def _splits():
-    """Evaluation splits only. Training rows are drawn per run by size and seed."""
-    return active_task().load_splits()
+    """Evaluation splits only. Training rows are drawn per run by size and seed.
+    BENCH_EVAL_LIMIT truncates them, for a pilot that only proves the pipeline."""
+    splits = active_task().load_splits()
+    limit = int(os.environ.get("BENCH_EVAL_LIMIT") or 0)
+    return {k: v[:limit] for k, v in splits.items()} if limit else splits
 
 
 def _tokenizer():
@@ -59,6 +64,16 @@ def _cfg(args):
         cfg = cfg.with_(gen_batch_size=args.gen_batch_size)
     if getattr(args, "negatives", None):
         cfg = cfg.with_(negatives=args.negatives)
+    if getattr(args, "corrections", None):
+        cfg = cfg.with_(corrections=args.corrections)
+    if getattr(args, "lr_select_size", None):
+        cfg = cfg.with_(lr_select_size=args.lr_select_size)
+    if getattr(args, "lr_select_seeds", None):
+        cfg = cfg.with_(lr_select_seeds=tuple(int(x) for x in args.lr_select_seeds.split(",")))
+    if getattr(args, "lr_candidates", None):
+        cfg = cfg.with_(lr_candidates=tuple(float(x) for x in args.lr_candidates.split(",")))
+    if getattr(args, "max_steps", None):
+        cfg = cfg.with_(max_steps=args.max_steps, min_steps=min(cfg.min_steps, args.max_steps))
     if getattr(args, "shard", None):
         i, n = (int(x) for x in args.shard.split("/"))
         cfg = cfg.with_(shard=(i, n))
@@ -197,6 +212,17 @@ def stage_check(args):
     # Whatever this task must prove before any GPU time is spent.
     if t.checks:
         failures += t.checks(cfg, splits)
+
+    if cfg.negatives:
+        bad = t.negatives.unsafe_rejects(cfg.arms)
+        print(f"  negatives {cfg.negatives:g}: refusals missing or readable as an order {bad or 'none'}")
+        if bad:
+            failures.append(f"negatives refusal unusable for {bad}")
+    if t.negatives is not None:
+        hits = t.negatives.collisions() + t.negatives.cue_collisions()
+        print(f"  negatives vocabulary collisions {len(hits)}")
+        if hits:
+            failures.append(f"negatives vocabulary collides with the menu or cues: {hits[:5]}")
 
     caps = cfg.caps or load_caps()
     tok = _tokenizer()
@@ -547,10 +573,8 @@ def stage_fewshot(args):
 
 
 def stage_grammar(args):
-    cfg = _cfg(args)
-    from . import grammar
-
     path = model_task_dir() / f"{active_task().name}_dsl.gbnf"
+    path.parent.mkdir(parents=True, exist_ok=True)
     t = active_task()
     if not t.write_grammar:
         sys.exit(f"task {t.name} has no grammar")
@@ -660,6 +684,34 @@ def stage_export(args):
     return 0
 
 
+def stage_heldout(args):
+    """Score a saved adapter on the held-out negatives or corrections without
+    retraining, so a run trained without them still gets a "before" number.
+    Writes <stage>_eval.json into the run directory."""
+    if not args.run:
+        sys.exit(f"usage: python -m bench {args.stage} --run <run-id>")
+    from .latency import load_adapter
+    from .train import assert_single_gpu, evaluate_corrections
+
+    cfg, t, out = _cfg(args), active_task(), run_dir(args.run)
+    conf = json.loads((out / "config.json").read_text())
+    arm, seed, cap = conf["arm"], conf["seed"], conf["cap"]
+    assert_single_gpu()
+    model, tok = load_adapter(out / "adapter", cfg.max_seq_length, use_unsloth=not args.no_unsloth)
+    test = _splits()["test"]
+    if args.stage == "corrections":
+        res = evaluate_corrections(model, tok, t, arm, cap, cfg, test, seed, out)
+    else:
+        neg = t.negatives
+        rows = neg.eval_rows(test, seed=seed) + neg.probe_rows()
+        outs, _ = evaluate.generate(model, tok, [t.source(r) for r in rows], cap, cfg.gen_batch_size)
+        saved = [json.loads(line)["raw"] for line in (out / "test_predictions.jsonl").open()]
+        res = neg.score(outs, rows, arm, saved)
+    (out / f"{args.stage}_eval.json").write_text(json.dumps(res, indent=2, sort_keys=True))
+    print(json.dumps(res, indent=2, sort_keys=True))
+    return 0
+
+
 STAGES = {
     "prepare": stage_prepare,
     "check": stage_check,
@@ -673,10 +725,12 @@ STAGES = {
     "latency": stage_latency,
     "report": stage_report,
     "export": stage_export,
+    "negatives": stage_heldout,
+    "corrections": stage_heldout,
 }
 
 
-def main(argv=None):
+def parser():
     from . import models as modelmod
     from . import tasks as taskmod
 
@@ -701,7 +755,12 @@ def main(argv=None):
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--out", default=None)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--run", help="negatives, corrections: the run id to score")
     ap.add_argument("--no-unsloth", action="store_true")
+    ap.add_argument("--lr-select-size", type=int, help="training size of the LR sweep")
+    ap.add_argument("--lr-select-seeds", help="seeds of the LR sweep, e.g. 0")
+    ap.add_argument("--lr-candidates", help="learning rates the sweep tries, e.g. 0.0001,0.0002")
+    ap.add_argument("--max-steps", type=int, help="training steps per run (default 4000)")
     ap.add_argument(
         "--gen-batch-size",
         type=int,
@@ -719,10 +778,18 @@ def main(argv=None):
         "--negatives", type=float, default=0.0,
         help="fraction of training rows that are not orders, e.g. 0.15 (with --fresh)",
     )
+    export.add_argument(
+        "--corrections", type=float, default=0.0,
+        help="self-corrections added on top, as a fraction of real orders, e.g. 0.1",
+    )
     export.add_argument("--quant", default="q8_0", help="export: comma list of q8_0,q4_k_m,f16")
     export.add_argument("--verify", type=int, default=200, help="export: test orders to check, 0 skips")
     export.add_argument("--llama-cpp", default=None, help="export: llama.cpp checkout (cloned if missing)")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
     # One selection point for the whole process. Everything downstream reads it
     # back through config.model() and config.task().
     cfgmod.select(args.model, args.task)

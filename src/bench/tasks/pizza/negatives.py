@@ -29,8 +29,14 @@ can order is ever taught as a refusal. Vocabulary is split, so the held-out
 evaluation (`eval_rows`) uses words the model never trained on. `PROBES` is a
 fixed challenge set, reported on every run.
 
-Only the ";"-separated formats (words, dsl, tagged) are supported, as in the café
-parser; the bracketed formats are refused rather than given an invented encoding.
+Every format has its own refusal, short and unparseable as an order in that
+format, so all six train on identical negatives:
+
+    words, dsl, tagged   ?                 (as in the café parser)
+    exr                  (REJECT )
+    exr_short            (R)
+    json                 {"reject":true}
+
 Dev and test stay pure PIZZA, so every paper number keeps its meaning.
 """
 
@@ -41,8 +47,9 @@ from pathlib import Path
 
 from .formats import PIZZA_DIR
 
-REJECT = "?"
-ARMS = ("words", "dsl", "tagged")
+REJECTS = {"words": "?", "dsl": "?", "tagged": "?", "exr": "(REJECT )",
+           "exr_short": "(R)", "json": '{"reject":true}'}
+ARMS = tuple(REJECTS)
 
 # Share of each kind among the negative rows.
 KINDS = {"non": 0.12, "off": 0.15, "junk": 0.25, "long": 0.08, "mixed": 0.20, "unknown": 0.20}
@@ -268,12 +275,28 @@ def pizza_vocab():
     return frozenset(w for r in head(500_000) for w in r["src"].split())
 
 
+def _cues():
+    """Correction cue words ("actually", "scratch"): an order containing them is
+    still an order (tasks/pizza/corrections.py), so they are never the unknown
+    word that makes one a refusal."""
+    from .corrections import cue_words
+
+    return cue_words()
+
+
+def cue_collisions():
+    """Whole words that negatives put into real orders and that are also
+    correction cue words. Must be empty. Syllables are checked as they are built."""
+    return [(name, item) for name in ("off", "noun", "adj")
+            for item in VOCAB[name][0] + VOCAB[name][1] if set(item.split()) & _cues()]
+
+
 def _with_unknown(rng, src, held):
     """(order with something unknown put in, what was added). Three ways: a
     modifier before the pizza word ("a large hehe pizza"), the pizza word itself
     swapped for an off-menu thing ("a large horse with extra cheese"), or an
     extra clause ("... with zorblo")."""
-    vocab = pizza_vocab()
+    vocab = pizza_vocab() | _cues()
     for _ in range(50):
         word = rng.choice([
             _nonsense_word(rng, held), _pool(rng, "adj", held), _pool(rng, "noun", held),
@@ -317,11 +340,30 @@ def _kinds(n, rng):
     return rng.choices(names, weights, k=n)
 
 
+def reject(arm):
+    if arm not in REJECTS:
+        raise ValueError(f"no refusal spelling for arm {arm!r}; have {ARMS}")
+    return REJECTS[arm]
+
+
+def unsafe_rejects(arms):
+    """Arms whose refusal is missing or decodes as an order. Must be empty."""
+    from .formats import decode
+
+    bad = []
+    for arm in arms:
+        try:
+            decode(reject(arm), arm)
+            bad.append(arm)
+        except Exception:
+            if arm not in REJECTS:
+                bad.append(arm)
+    return bad
+
+
 def target(row, arm):
     """The completion for a negative row. Ordinary rows never reach here."""
-    if arm not in ARMS:
-        raise ValueError(f"negatives need a ';'-separated arm {ARMS}, not {arm!r}")
-    return REJECT
+    return reject(arm)
 
 
 def mix(rows, frac, seed, arm):
@@ -329,8 +371,7 @@ def mix(rows, frac, seed, arm):
     Built from training vocabulary and training orders only. Deterministic."""
     if not 0 < frac < 1:
         raise ValueError(f"negatives fraction must be in (0, 1), got {frac}")
-    if arm not in ARMS:
-        raise ValueError(f"negatives need a ';'-separated arm {ARMS}, not {arm!r}")
+    reject(arm)
     rng = random.Random(20_000 + seed)
     n = round(len(rows) * frac / (1 - frac))
     out = list(rows)
@@ -376,13 +417,19 @@ def probe_rows():
 # ---------- scoring ----------
 
 
-def is_reject(text):
-    return text.strip() == REJECT
+def is_reject(text, arm):
+    return text.strip() == reject(arm)
+
+
+def has_reject(text, arm):
+    """The refusal anywhere in the output, alone or mixed into a ticket."""
+    r = reject(arm)
+    return r in text.split() if r == "?" else r in text
 
 
 def correct(output, row, arm):
-    """A negative is handled only by "?" alone: no ticket, nothing printed."""
-    return is_reject(output)
+    """A negative is handled only by the refusal alone: no ticket, nothing printed."""
+    return is_reject(output, arm)
 
 
 def score(outputs, rows, arm, test_outputs=()):
@@ -397,6 +444,6 @@ def score(outputs, rows, arm, test_outputs=()):
         **{f"handled_{k}": sum(v) / len(v) for k, v in sorted(by.items())},
     }
     if test_outputs:
-        # Anything other than a ticket on a real order: "?" or "?" mixed in.
-        res["false_reject_on_test"] = sum(REJECT in o.split() for o in test_outputs) / len(test_outputs)
+        # Anything other than a ticket on a real order: the refusal, or one mixed in.
+        res["false_reject_on_test"] = sum(has_reject(o, arm) for o in test_outputs) / len(test_outputs)
     return res

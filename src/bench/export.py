@@ -182,6 +182,7 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
     # --fresh trains under a dated tag; --tag names an already trained run, so an
     # export that failed after training can be rerun without training again.
     neg = f"neg{round(cfg.negatives * 100)}-" if cfg.negatives else ""
+    neg += f"cor{round(cfg.corrections * 100)}-" if cfg.corrections else ""
     tag = tag or (f"{neg}fresh-{date.today():%Y%m%d}" if fresh else "")
     rid = run_id(arm, size, seed, lr, tag)
     if fresh or not is_complete(rid):
@@ -202,7 +203,7 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
     from .evaluate import prompt_for
 
     fmt = prompt_for(AutoTokenizer.from_pretrained(m.hf_id))
-    out = REPO / "models" / t.name
+    out = Path(os.environ.get("BENCH_MODELS") or REPO / "models") / t.name
     out.mkdir(parents=True, exist_ok=True)
     name = f"{t.name}-{m.name}-{rid}"
     merged = out / f"{name}-merged"
@@ -212,7 +213,8 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
     files = convert(root, merged, out, name, quants)
     shutil.rmtree(merged)
 
-    trained_neg = json.loads((run_dir(rid) / "config.json").read_text()).get("negatives", 0.0)
+    trained = json.loads((run_dir(rid) / "config.json").read_text())
+    trained_neg = trained.get("negatives", 0.0)
     manifest = {
         "run_id": rid,
         "model": m.name,
@@ -225,7 +227,8 @@ def export(cfg, splits, arm, size, seed, lr, fresh=False, quants=("q8_0",), n_ve
         "licence": getattr(t, "licence", None),
         # What the run was trained with, from its own config, not this command's flags.
         "negatives": trained_neg,
-        "reject": t.negatives.REJECT if trained_neg and t.negatives else None,
+        "reject": t.negatives.reject(arm) if trained_neg and t.negatives else None,
+        "corrections": trained.get("corrections", 0.0),
         "files": {},
     }
     for q, path in files.items():

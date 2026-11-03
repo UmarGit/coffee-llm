@@ -71,7 +71,7 @@ def load_adapter(adapter_dir, max_seq_length=640, use_unsloth=True):
 
     from .train import normalize_tokenizer
 
-    if use_unsloth:
+    if use_unsloth and active_model().supports_unsloth:
         try:
             from unsloth import FastLanguageModel
 

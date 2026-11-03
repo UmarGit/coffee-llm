@@ -130,3 +130,9 @@ scratch/
 # ---------------------------------------------------------------------------
 
 node_modules/
+
+# Written by scripts/push_code.sh for the server.
+VERSION
+
+# Candidate GGUFs fetched for probing (handover.md).
+candidate/

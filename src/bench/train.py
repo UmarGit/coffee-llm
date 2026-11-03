@@ -128,10 +128,10 @@ def build(cfg, seed, use_unsloth=True):
 
 
 class EarlyStop:
-    def __init__(self, model, tok, rows, arm, cap, cfg, neg_rows=None):
+    def __init__(self, model, tok, rows, arm, cap, cfg, neg_rows=None, fix_rows=None):
         self.model, self.tok, self.rows = model, tok, rows
         self.arm, self.cap, self.cfg = arm, cap, cfg
-        self.neg_rows = neg_rows
+        self.neg_rows, self.fix_rows = neg_rows, fix_rows
         self.curve, self.best, self.state, self.stale = [], (-1.0, 0), None, 0
 
     def step(self, step):
@@ -141,18 +141,27 @@ class EarlyStop:
             self.model, self.tok, self.rows, self.arm, self.cap, self.cfg.gen_batch_size
         )
         point = {"step": step, "dev_em": res["em"], "dev_validity": res["parse_validity"]}
-        score = res["em"]
+        parts = [res["em"]]
+        t = active_task()
         if self.neg_rows:
             # With negatives, a checkpoint must parse orders AND refuse everything
             # else; selecting on dev EM alone stops before refusal is learned.
-            t = active_task()
             outs, _ = evaluate.generate(
                 self.model, self.tok, [t.source(r) for r in self.neg_rows], self.cap,
                 self.cfg.gen_batch_size,
             )
             handled = t.negatives.score(outs, self.neg_rows, self.arm)["handled"]
             point["dev_neg_handled"] = handled
-            score = (res["em"] + handled) / 2
+            parts.append(handled)
+        if self.fix_rows:
+            outs, _ = evaluate.generate(
+                self.model, self.tok, [t.source(r) for r in self.fix_rows], self.cap,
+                self.cfg.gen_batch_size,
+            )
+            fixed = t.corrections.score(outs, self.fix_rows, self.arm)[0]["em"]
+            point["dev_corrections_em"] = fixed
+            parts.append(fixed)
+        score = sum(parts) / len(parts)
         point["selection_score"] = score
         self.curve.append(point)
         if score > self.best[0]:
@@ -170,6 +179,27 @@ class EarlyStop:
     def restore(self):
         if self.state:
             self.model.load_state_dict(self.state, strict=False)
+
+
+def evaluate_corrections(model, tok, t, arm, cap, cfg, test_rows, seed, out):
+    """Held-out correction cues on test orders, plus the hand-written probes.
+    Run with or without correction training, so every run has a "before"."""
+    fix = t.corrections
+    rows = fix.eval_rows(test_rows, seed=seed)
+    probes = fix.probe_rows()
+    outs, _ = evaluate.generate(
+        model, tok, [t.source(r) for r in rows + probes], cap, cfg.gen_batch_size
+    )
+    res, preds, em = fix.score(outs[: len(rows)], rows, arm)
+    pres, ppreds, pem = fix.score(outs[len(rows):], probes, arm)
+    res["probes"] = {k: pres[k] for k in ("n", "em", "refused")}
+    res["probes"].update(fix.outcomes(outs[len(rows):], ppreds, pem, arm))
+    with open(out / "corrections_predictions.jsonl", "w") as f:
+        for i, (r, o, p, e) in enumerate(zip(rows + probes, outs, preds + ppreds, em + pem)):
+            f.write(json.dumps({"src": r["src"], "kind": r["fix"], "gold": r["exr"], "raw": o,
+                                "pred": p, "correct": e, "applied": fix.applied(p, r),
+                                "probe": i >= len(rows)}) + "\n")
+    return res
 
 
 def train_one(
@@ -218,6 +248,12 @@ def train_one(
             raise ValueError(f"task {t.name} has no negative data")
         # Added on top of the task's rows, so `size` still counts real orders.
         train_rows = t.negatives.mix(train_rows, cfg.negatives, seed, arm)
+    if cfg.corrections:
+        if t.corrections is None:
+            raise ValueError(f"task {t.name} has no correction data")
+        # Built from the real orders only and counted against them, so the
+        # negatives keep the share they had without corrections.
+        train_rows = t.corrections.mix(train_rows, cfg.corrections, seed)
     ds = Dataset.from_list(
         [
             {"prompt": fmt.format(t.source(r)), "completion": t.target(r, arm) + eos}
@@ -226,7 +262,8 @@ def train_one(
     )
 
     neg_dev = t.negatives.dev_rows(splits["dev"], seed=seed) if cfg.negatives else None
-    stopper = EarlyStop(model, tok, splits["dev"], arm, cap, cfg, neg_dev)
+    fix_dev = t.corrections.dev_rows(splits["dev"], seed=seed) if cfg.corrections else None
+    stopper = EarlyStop(model, tok, splits["dev"], arm, cap, cfg, neg_dev, fix_dev)
     losses = []
 
     class Hook(TrainerCallback):
@@ -284,8 +321,8 @@ def train_one(
         "cap": cap,
         "tokenizer": tok_info,
         "best_step": stopper.best[1],
-        # The selection score is dev EM, or with negatives the mean of dev EM and
-        # negatives handled; dev EM itself is recorded either way.
+        # The selection score is the mean of dev EM and, when trained on them,
+        # dev negatives handled and dev corrections EM; dev EM is recorded either way.
         "best_dev_em_during_training": next(
             (c["dev_em"] for c in stopper.curve if c["step"] == stopper.best[1]), stopper.best[0]
         ),
@@ -333,6 +370,12 @@ def train_one(
                 f.write(json.dumps({"src": r["src"], "kind": r["neg"], "raw": o,
                                     "correct": neg.correct(o, r, arm)}) + "\n")
         print(f"  negatives {rid}: {json.dumps(metrics_out['negatives'])}", flush=True)
+
+    if t.corrections is not None:
+        metrics_out["corrections"] = evaluate_corrections(
+            model, tok, t, arm, cap, cfg, splits["test"], seed, out
+        )
+        print(f"  corrections {rid}: {json.dumps(metrics_out['corrections'])}", flush=True)
 
     (out / "curves.json").write_text(
         json.dumps({"dev": stopper.curve, "loss": losses}, indent=2)

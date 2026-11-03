@@ -77,6 +77,9 @@ class Config:
     negatives: float = 0.0
     """Fraction of training rows that are not orders (tasks/pizza/negatives.py).
     0 trains on the task's data alone, as every paper run did."""
+    corrections: float = 0.0
+    """Self-corrections added on top, as a fraction of the real orders
+    (tasks/pizza/corrections.py). 0 as in every paper run."""
     caps: dict = field(default_factory=dict)
     lrs: dict = field(default_factory=dict)
 

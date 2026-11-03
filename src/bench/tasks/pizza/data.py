@@ -176,15 +176,6 @@ def head(size, pool=DEFAULT_POOL):
     return out
 
 
-def subset(rows, size, seed):
-    """Deterministic subset of an in-memory list, used for dev slices and few-shot."""
-    idx = list(range(len(rows)))
-    random.Random(10_000 + seed).shuffle(idx)
-    if size > len(idx):
-        raise ValueError(f"asked for {size} of {len(idx)} rows")
-    return [rows[i] for i in idx[:size]]
-
-
 def pcfg_error_subset(rows):
     return [r for r in rows if r["pcfg_err"]]
 

@@ -17,7 +17,6 @@ import statistics
 import sys
 from collections import Counter, defaultdict
 from datetime import date
-from glob import glob
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -411,7 +410,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     print("writing", OUT)
     total = 0.0
-    fmts, kb = export_formats()
+    _, kb = export_formats()
     total += kb
 
     runs, _ = headline_runs("qwen")

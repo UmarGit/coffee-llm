@@ -1,4 +1,3 @@
-import json
 
 import pytest
 
@@ -357,7 +356,7 @@ def test_fewshot_prompt_uses_the_arm_format():
 
 
 def test_latency_resume_skips_measured_runs(tmp_path, monkeypatch):
-    from bench import config, latency
+    from bench import latency
 
     monkeypatch.setattr(latency, "model_task_dir", lambda: tmp_path)
     assert latency.done_run_ids() == set()
@@ -381,7 +380,7 @@ def test_assert_adapter_active_rejects_an_unapplied_adapter():
     class Fake:
         def __init__(self, vals):
             self._p = [
-                (f"base.layers.0.lora_B.default.weight", torch.tensor(v)) for v in vals
+                ("base.layers.0.lora_B.default.weight", torch.tensor(v)) for v in vals
             ]
 
         def named_parameters(self):

@@ -297,8 +297,3 @@ def encode(node, fmt):
 
 def decode(text, fmt):
     return DECODERS[fmt](text)
-
-
-def to_exr_from(text, fmt):
-    """Decode a model output in `fmt` and re-serialise as EXR, for the official matcher."""
-    return to_exr(decode(text, fmt))

@@ -95,6 +95,10 @@ class Task:
     """A module with mix/target/eval_rows/score for training on inputs that are
     not orders (see tasks/pizza/negatives.py). None means the task has none."""
 
+    corrections: object = None
+    """A module with mix/dev_rows/eval_rows/probe_rows/score for orders the
+    customer corrects as they speak (see tasks/pizza/corrections.py)."""
+
 
 _LOADERS = {
     "pizza": lambda: __import__("bench.tasks.pizza", fromlist=["TASK"]).TASK,

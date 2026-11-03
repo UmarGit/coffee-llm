@@ -15,6 +15,7 @@ import time
 from . import evaluate
 from .config import model as active_model
 from .config import model_task_dir, run_dir
+from .config import task as active_task
 
 
 def results_path():
@@ -203,7 +204,6 @@ def measure(model, tok, rows, arm, cap, warmup=5):
 
 def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
     import torch
-    from . import metrics
 
     rows = splits[split][:limit]
     cap = cfg.caps[arm]
@@ -221,7 +221,7 @@ def run(cfg, splits, arm, run_ids, limit=200, split="test", use_unsloth=True):
             adapter, max_seq_length=cfg.max_seq_length, use_unsloth=use_unsloth
         )
         res, outs, _ = measure(model, tok, rows, arm, cap)
-        acc, _, _ = metrics.evaluate(outs, [r["exr"] for r in rows], arm)
+        acc, _, _ = active_task().score(outs, rows, arm)
         res.update(
             run_id=rid,
             split=split,

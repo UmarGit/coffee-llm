@@ -471,8 +471,9 @@ def stage_determinism(args):
 
 
 def stage_test(args):
-    """Aggregation only. Grid runs already evaluated test; nothing is retrained here."""
-    runs = [r for r in report.load_runs("grid")]
+    """Aggregation only. Grid runs already evaluated test; nothing is retrained here.
+    The report's runs, because a sweep run at the chosen LR is a grid cell too."""
+    runs = report.primary_runs()
     if not runs:
         sys.exit("no completed grid runs")
     print(

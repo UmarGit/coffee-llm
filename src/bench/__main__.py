@@ -304,7 +304,10 @@ def stage_smoke(args):
         "hit_cap",
         m["dev"].get("hit_cap_rate"),
     )
-    return stage_report(args)
+    # The report leaves smoke runs out, so in a fresh directory it has nothing to
+    # build yet. That is not a smoke failure; a report that crashes still raises.
+    stage_report(args)
+    return 0
 
 
 def _sweep_jobs(cfg):

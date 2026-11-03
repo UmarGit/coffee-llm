@@ -48,6 +48,10 @@ def generate_from_prompts(net, tok, prompts, cap, batch_size=32):
     eos_id = tok.convert_tokens_to_ids(eos)
     if eos_id is None or eos_id == tok.unk_token_id:
         raise RuntimeError(f"tokenizer has no id for {eos}; stopping would never fire")
+    # Set here, not only at load: from the second run in a process on, the trainer
+    # leaves the shared tokenizer right padded, which puts pad tokens between the
+    # prompt and the continuation and silently costs exact match.
+    tok.padding_side = "left"
     texts, counts = [], []
     net.eval()
     with torch.no_grad():

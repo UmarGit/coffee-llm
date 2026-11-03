@@ -558,7 +558,12 @@ def applied(pred_exr, row):
     """The correction itself landed, even if something else on the ticket is wrong."""
     if pred_exr is None:
         return False
-    got = facts(parse_exr(pred_exr))
+    # A model can emit a tree that parses but breaks the grammar, such as a
+    # COMPLEX_TOPPING with no QUANTITY. That ticket applied nothing.
+    try:
+        got = facts(parse_exr(pred_exr))
+    except Exception:
+        return False
     return all(f in got for f in row["must"]) and not any(f in got for f in row["must_not"])
 
 

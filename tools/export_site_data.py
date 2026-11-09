@@ -373,6 +373,43 @@ def export_respell():
     return write("respell.json", {"orders": out}, [runs["words"]["run_id"]])
 
 
+def export_guardrail():
+    """Refusals and self-corrections for the live arm: means over every seed at the
+    full pool, plus the seed-0 run's own outputs on the challenge prompts (the run
+    the published model is exported from)."""
+    runs, head = headline_runs("qwen")
+    d = Path(runs["words"]["_dir"])
+    base = d.parent
+    seeds = sorted(base.glob(f"words-n{head}-s*-lr{runs['words']['lr']:g}"))
+    seeds = [x for x in seeds if x.name.count("-") == 3 and (x / "metrics.json").exists()]
+    ms = [json.loads((x / "metrics.json").read_text()) for x in seeds]
+
+    def avg(block, key):
+        return round(statistics.fmean(m[block][key] for m in ms), 4)
+
+    neg_keys = [k for k in ms[0]["negatives"] if k != "n"]
+    probes = [json.loads(x) for x in (d / "negatives_predictions.jsonl").read_text().splitlines() if x.strip()]
+    probes = [{"src": r["src"], "raw": r["raw"]} for r in probes if r["kind"] == "probe"]
+    fixes = [json.loads(x) for x in (d / "corrections_predictions.jsonl").read_text().splitlines() if x.strip()]
+    fix_probes = [{"src": r["src"], "raw": r["raw"], "correct": r["correct"]} for r in fixes if r["probe"]]
+    reported = []
+    for x in seeds:
+        rows = [json.loads(y) for y in (x / "corrections_predictions.jsonl").read_text().splitlines() if y.strip()]
+        reported.append(next(r for r in rows if r["probe"])["correct"])
+    payload = {
+        "seeds": len(ms),
+        "negatives": {"n": ms[0]["negatives"]["n"], **{k: avg("negatives", k) for k in neg_keys}},
+        "corrections": {"n": ms[0]["corrections"]["n"], "em": avg("corrections", "em"),
+                        "applied": avg("corrections", "applied"),
+                        "probes": round(statistics.fmean(m["corrections"]["probes"]["correct"] for m in ms), 1),
+                        "probesTotal": len(fix_probes),
+                        "reportedFixed": sum(reported)},
+        "probes": probes,
+        "fixProbes": fix_probes,
+    }
+    return write("guardrail.json", payload, [x.name for x in seeds])
+
+
 def export_architecture():
     """The Stack is a picture of the real model, so it reads the real config.
 
@@ -433,6 +470,7 @@ def main():
     total += export_idle()
     total += export_tickets()
     total += export_respell()
+    total += export_guardrail()
 
     # Named so the site can fail loudly instead of rendering an empty section.
     absent = {

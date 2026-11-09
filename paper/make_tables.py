@@ -1,393 +1,446 @@
 #!/usr/bin/env python3
-"""Emit every LaTeX table and macro in the paper from runs/. Nothing is hand typed.
+"""Every LaTeX table and macro in the paper, from the neg-v1 campaign. Nothing is hand typed.
 
     uv run --extra pizza python paper/make_tables.py
+
+Reads the campaign through tools/analysis (same cache, same bootstrap draws, same
+Holm families as analysis/out/claims.md). Rates are printed in percentage points.
 """
+import csv
 import json
+import re
 import statistics
 import sys
-from collections import defaultdict
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
 sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "tools" / "analysis"))
+sys.path.insert(0, str(HERE))
 
-from bench import config, evaluate, report
+import common as C
+import errors as E
+import stats as S
+from palette import MACRO, latex_colors
 
-SIZES = config.Config.for_active().sizes
-SMALL, HEADLINE = SIZES[0], SIZES[-1]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from palette import LABEL, MACRO, latex_colors
+import data as D
 
-OUT = REPO / "paper" / "generated"
-ARMS = ["exr", "json", "exr_short", "tagged", "dsl", "words"]
-
-
-def load(size):
-    by = defaultdict(list)
-    for r in report.primary_runs():
-        if r["size"] == size:
-            by[r["arm"]].append(r)
-    return by
-
-
-def m(rs, key, split="test"):
-    return statistics.fmean(r[split][key] for r in rs)
+M = C.manifest()
+ARMS, MODELS, SIZES, SEEDS = M["arms"], M["models"], M["sizes"], M["seeds"]
+HEAD = max(SIZES)
+OUT = HERE / "generated"
+P = {"qwen": "Q", "lfm2": "L"}
+FMT = {a: f"\\fmt{{{C.LABEL[a]}}}" for a in ARMS}
+TAB = C.OUT / "tables"
+DAG = "$^\\dagger$"
 
 
-def s(rs, key, split="test"):
-    v = [r[split][key] for r in rs]
-    return statistics.stdev(v) if len(v) > 1 else 0.0
+def pct(x, d=1):
+    return f"{100 * x:.{d}f}"
 
 
-HEAD_MAIN = (r"\begin{tabular}{lrrrrrrr}" "\n" r"\toprule" "\n"
-             r"Format & Tokens & Exact match & Parse validity & "
-             r"\textbf{Silent error} & Halluc./utt.\ & Latency (ms) & Mem.\ (MiB) \\" "\n"
-             r"\midrule")
-HEAD_PAIRS = (r"\begin{tabular}{llrrrl}" "\n" r"\toprule" "\n"
-              r"Pair & Seed & Tokens & $\Delta$ EM & 95\% CI & Verdict \\" "\n"
-              r"\midrule")
-HEAD_SLOPE = (r"\begin{tabular}{lrr}" "\n" r"\toprule" "\n"
-              r"Train size & Endpoint & Slope / 10 tokens \\" "\n" r"\midrule")
-FOOT = "\n" r"\bottomrule" "\n" r"\end{tabular}"
+def spct(x, d=1):
+    return f"{100 * x:+.{d}f}"
 
 
-def wrap(head, body):
-    r"""Emit a complete tabular. \input inside an alignment breaks \noalign."""
-    return head + "\n" + body + FOOT
+def pretty(n):
+    return f"{n:,}".replace(",", "{,}")
 
 
-def main_table(by):
-    lat = {d["arm"]: d for d in report.latency_table()}
+def tick(n):
+    return f"{n / 1e6:.1f}M".replace(".0M", "M") if n >= 1e6 else f"{n // 1000}k"
+
+
+def sm(model, arm, size, name):
+    return D.get(model, arm, size, name).mean(axis=1)
+
+
+def mean(model, arm, name, size=HEAD):
+    return float(sm(model, arm, size, name).mean())
+
+
+def sd(model, arm, name, size=HEAD):
+    return float(sm(model, arm, size, name).std(ddof=1))
+
+
+def csv_rows(name):
+    with open(TAB / name) as f:
+        return list(csv.DictReader(f))
+
+
+def latency(model):
+    out = {}
+    for line in open(C.base(model) / "latency_gpu.jsonl"):
+        r = json.loads(line)
+        out.setdefault(r["arm"], []).append(r)
+    return out
+
+
+LAT = {m: latency(m) for m in MODELS}
+
+
+def lat_ms(model, arm):
+    return statistics.fmean(x["median_ms"] for x in LAT[model][arm])
+
+
+def family(model, a, b, metric="correct"):
+    res = [S.diff(D.get(model, a, s, metric), D.get(model, b, s, metric)) for s in SIZES]
+    for r, p in zip(res, S.holm([r["p"] for r in res])):
+        r["p_holm"] = p
+        r["sep"] = p < 0.05
+    return res
+
+
+def ranking(model, metric, better):
+    """Best arm, and arms not separable from it (Holm across the five others)."""
+    means = {a: mean(model, a, metric) for a in ARMS}
+    best = better(means, key=means.get)
+    res = {a: S.diff(D.get(model, a, HEAD, metric), D.get(model, best, HEAD, metric)) for a in ARMS if a != best}
+    adj = dict(zip(res, S.holm([r["p"] for r in res.values()])))
+    return best, {a for a in res if adj[a] >= 0.05}
+
+
+def mark(text, arm, best, tied):
+    if arm == best:
+        return f"\\textbf{{{text}}}"
+    return f"\\underline{{{text}}}" if arm in tied else text
+
+
+def tabular(cols, head, body, foot=""):
+    return "\n".join([f"\\begin{{tabular}}{{{cols}}}", "\\toprule", head, "\\midrule", body,
+                      "\\bottomrule", "\\end{tabular}"]) + foot + "\n"
+
+
+# ---------- T1: main results ----------
+
+def t1():
     lines = []
-    for a in ARMS:
-        rs = by[a]
-        em, valid = m(rs, "em"), m(rs, "parse_validity")
-        silent = valid - em
-        L = lat.get(a, {})
-        lines.append(
-            f"{LABEL[a]} & {m(rs, 'mean_generated_tokens'):.1f} & "
-            f"{em:.3f} {{\\scriptsize $\\pm$ {s(rs, 'em'):.3f}}} & "
-            f"{valid:.3f} & {silent:.3f} & "
-            f"{m(rs, 'hallucinated_entity'):.3f} & "
-            f"{L.get('median_ms', float('nan')):.0f} & "
-            f"{L.get('proc_mem_mib', float('nan')):.0f} \\\\")
-    return "\n".join(lines)
+    for i, m in enumerate(MODELS):
+        ba, ta = ranking(m, "correct", max)
+        bs, ts = ranking(m, "silent", min)
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{8}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a in ARMS:
+            em = mark(f"{pct(mean(m, a, 'correct'))}", a, ba, ta) + f"\\,{{\\scriptsize$\\pm${pct(sd(m, a, 'correct'))}}}"
+            s = mark(f"{pct(mean(m, a, 'silent'))}", a, bs, ts) + f"\\,{{\\scriptsize$\\pm${pct(sd(m, a, 'silent'))}}}"
+            lines.append(" & ".join([
+                FMT[a], f"{mean(m, a, 'tokens'):.1f}", em, s,
+                f"{pct(mean(m, a, 'd_parse'))}\\,{{\\scriptsize$\\pm${pct(sd(m, a, 'd_parse'))}}}",
+                f"{pct(mean(m, a, 'd_refuse'))}\\,{{\\scriptsize$\\pm${pct(sd(m, a, 'd_refuse'))}}}",
+                f"{mean(m, a, 'hallucinated'):.3f}",
+                f"{lat_ms(m, a):.0f}"]) + " \\\\")
+    head = ("Format & Tok. & $A$ (EM) $\\uparrow$ & $S$ (silent) $\\downarrow$ & $D_\\text{parse}$ & "
+            "$D_\\text{refuse}$ & Inv./utt. & ms \\\\")
+    return tabular("lrrrrrrr", head, "\n".join(lines))
 
 
-def matched_pairs_table():
-    rows = report.matched_pairs(report.primary_runs(), "test")
-    out = []
-    for r in rows:
-        if r["size"] != HEADLINE:
-            continue
-        out.append(
-            f"{LABEL[r['a']]}/{LABEL[r['b']]} & {r['seed']} & "
-            f"{r['tokens_a']:.1f}/{r['tokens_b']:.1f} & "
-            f"{r['mean_diff']:+.3f} & [{r['ci_lo']:+.3f},\\,{r['ci_hi']:+.3f}] & "
-            f"{'noise' if r['within_noise'] else 'sep.'} \\\\")
-    return "\n".join(out)
+# ---------- T2: paired differences across sizes ----------
+
+PAIRS = [("words", "dsl", "correct", "matched length"), ("exr", "json", "correct", "matched length"),
+         ("exr", "exr_short", "correct", "same structure, shorter names"), ("words", "exr", "correct", "headline"),
+         ("exr", "words", "silent", "silent rate")]
 
 
-def slope_table():
-    runs = report.primary_runs()
-    out = []
-    for size in (SMALL, HEADLINE):
-        for metric, name in (("em", "exact match"),
-                             ("parse_validity", "parse validity"),
-                             ("hallucinated_entity", "hallucinated entities")):
-            sl = report.slope_on_tokens(runs, size, "test", metric)
-            if sl:
-                out.append(f"{size:,} & {name} & {sl['slope_per_10_tokens']:+.4f} \\\\"
-                           .replace(",", "{,}"))
-    return "\n".join(out)
+def pair_label(a, b, metric):
+    if metric == "silent":
+        return f"$S$: {FMT[a]}$-${FMT[b]}"
+    return f"{FMT[a]}$-${FMT[b]}"
 
 
-def macros(by, by_small):
-    lat = {d["arm"]: d for d in report.latency_table()}
-    # runs/<model>/<task>/, not the old flat runs/, so two models cannot share a
-    # noise floor measured on only one of them.
-    det = json.loads((config.model_task_dir() / "determinism.json").read_text())
-    d = {}
-    for a in ARMS:
-        rs = by[a]
-        d[f"{MACRO[a]}Em"] = f"{m(rs, 'em'):.3f}"
-        d[f"{MACRO[a]}Tok"] = f"{m(rs, 'mean_generated_tokens'):.1f}"
-        d[f"{MACRO[a]}Valid"] = f"{m(rs, 'parse_validity'):.3f}"
-        d[f"{MACRO[a]}Silent"] = f"{m(rs, 'parse_validity') - m(rs, 'em'):.3f}"
-        d[f"{MACRO[a]}Hall"] = f"{m(rs, 'hallucinated_entity'):.3f}"
-        d[f"{MACRO[a]}Miss"] = f"{m(rs, 'missing_entity'):.3f}"
-        d[f"{MACRO[a]}Lat"] = f"{lat[a]['median_ms']:.0f}" if a in lat else "n/a"
-        d[f"{MACRO[a]}EmSmall"] = f"{m(by_small[a], 'em'):.3f}"
-    # Sizes and slopes as macros too, so prose cannot keep quoting a grid that
-    # has changed underneath it. This is exactly what went stale last time.
-    def pretty(n):
-        return f"{n:,}".replace(",", "{,}")
-
-    d["nSmall"] = pretty(SMALL)
-    d["nHeadline"] = pretty(HEADLINE)
-    d["nLrSelect"] = pretty(config.Config.for_active().lr_select_size)
-    d["nSizes"] = str(len(SIZES))
-    runs = report.primary_runs()
-    for key, size in (("Small", SMALL), ("Head", HEADLINE)):
-        sl = report.slope_on_tokens(runs, size, "test", "em")
-        if sl:
-            # Reported as points of exact match per ten tokens, the way the prose
-            # talks about it, and signed so "costs" reads correctly.
-            d[f"slopeEm{key}"] = f"{abs(sl['slope_per_10_tokens']) * 100:.1f}"
-    d["noiseFloor"] = f"{det['test_abs_diff']:.3f}"
-    d["nTest"] = str(by["exr"][0]["test"]["n"])
-    d["nPcfg"] = str(by["exr"][0]["test"]["n_pcfg_err"])
-    d["nRuns"] = str(len(report.primary_runs()))
-    d["speedup"] = f"{lat['exr']['median_ms'] / lat['words']['median_ms']:.1f}"
-    d["tokRatio"] = f"{m(by['exr'], 'mean_generated_tokens') / m(by['words'], 'mean_generated_tokens'):.1f}"
-    d["hallRatio"] = f"{m(by['exr'], 'hallucinated_entity') / m(by['words'], 'hallucinated_entity'):.1f}"
-    exr_silent = m(by['exr'], 'parse_validity') - m(by['exr'], 'em')
-    words_silent = m(by['words'], 'parse_validity') - m(by['words'], 'em')
-    d["silentRatio"] = f"{exr_silent / words_silent:.1f}"
-    mems = [d2["proc_mem_mib"] for d2 in report.latency_table()
-            if d2.get("proc_mem_mib")]
-    if mems:
-        d["memMin"] = f"{min(mems):.0f}"
-        d["memMax"] = f"{max(mems):.0f}"
-    # The published reference points, from the task registry rather than typed,
-    # together with how far our pool is from the published training set. The gap
-    # is the three rows we drop for duplicating an evaluation utterance, so the
-    # prose can state the comparison exactly instead of rounding it.
-    task = config.task()
-    if task.published:
-        name, em = task.published[0]
-        d["publishedSystem"] = name
-        d["publishedEm"] = f"{em:.3f}"
-        d["publishedTrainN"] = f"{task.published_train_n:,}".replace(",", "{,}")
-        d["publishedGap"] = str(task.published_train_n - HEADLINE)
-        d["headlineBeatsPublished"] = f"{max(m(by[a], 'em') for a in ARMS) - em:.3f}"
-    d["pcfgWords"] = f"{m(by['words'], 'em_pcfg_err'):.3f}"
-    d["pcfgExr"] = f"{m(by['exr'], 'em_pcfg_err'):.3f}"
-
-    # The worst ladder arm, generated rather than typed. The prose used to name
-    # exr_short here and exr_short is not the worst; the two are 0.013 apart and
-    # the ordering is not stable enough to hand type.
-    ladder = config.task().ladder_arms
-    worst = min(ladder, key=lambda a: m(by[a], "em"))
-    d["worstArm"] = LABEL[worst]
-    d["worstArmEm"] = f"{m(by[worst], 'em'):.3f}"
-    # What the most aggressive structural compression costs against the format it
-    # compresses, which is the claim the paragraph is actually making.
-    d["exrShortDrop"] = f"{m(by['exr'], 'em') - m(by['exr_short'], 'em'):.3f}"
-
-    # Matched-pair separation counts over the WHOLE grid, not just the headline
-    # size the table shows. The prose claimed twelve comparisons all separating;
-    # the real picture is that the symbolic-versus-words pair separates almost
-    # everywhere and the s-expression-versus-JSON pair is near chance, which is a
-    # different and better argument. Counted here so it cannot be mistyped.
-    pairs = report.matched_pairs(report.primary_runs(), "test")
-    for a, b in config.task().matched_pairs:
-        rows = [r for r in pairs if (r["a"], r["b"]) == (a, b)]
-        key = f"{MACRO[a]}{MACRO[b][0].upper()}{MACRO[b][1:]}"
-        d[f"pair{key}Total"] = str(len(rows))
-        d[f"pair{key}Sep"] = str(sum(1 for r in rows if not r["within_noise"]))
-        # How many favour each side, so a sign-consistency claim is checkable
-        # without the prose doing arithmetic on the totals.
-        d[f"pair{key}FavB"] = str(sum(1 for r in rows if r["mean_diff"] < 0))
-        d[f"pair{key}FavA"] = str(sum(1 for r in rows if r["mean_diff"] > 0))
-    return "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(d.items()))
+def t2():
+    lines, ci_lines = [], []
+    fams = {}
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+            ci_lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        ci_lines.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a, b, metric, _ in PAIRS:
+            res = family(m, a, b, metric)
+            fams[(m, a, b, metric)] = res
+            cells = [f"{spct(r['est'])}{DAG if r['sep'] else ''}" for r in res]
+            lines.append(pair_label(a, b, metric) + " & " + " & ".join(cells) + " \\\\")
+            cells = [f"{spct(r['est'])} [{spct(r['lo'])}, {spct(r['hi'])}]{DAG if r['sep'] else ''}" for r in res]
+            ci_lines.append(pair_label(a, b, metric) + " & " + " & ".join(cells) + " \\\\")
+    head = "Difference (points) & " + " & ".join(tick(s) for s in SIZES) + " \\\\"
+    return (tabular("l" + "r" * len(SIZES), head, "\n".join(lines)),
+            tabular("l" + "r" * len(SIZES), head, "\n".join(ci_lines)), fams)
 
 
-# ---------------------------------------------------------------------------
-# Replication across models.
-#
-# Absolute scores are not comparable between models: they differ in capacity,
-# architecture, adapter targets and prompt conditioning. What is comparable is
-# the ordering of arms and the matched-pair difference, because those are what
-# the ladder design isolates. So this emits exactly those, and nothing that
-# would invite a model-versus-model reading.
-# ---------------------------------------------------------------------------
+# ---------- T3: guardrail ----------
 
-REPLICATION_MODELS = ("qwen", "lfm2")
+def first_probe_fixed(m, a):
+    return int(D.get(m, a, HEAD, "probe_em")[:, 0].sum())
 
 
-def _model_summary(model_name):
-    """Per-arm tokens and exact match at the headline size, plus the noise floor."""
-    config.select(model_name, "pizza")
-    by = load(HEADLINE)
-    if not by or not all(by.get(a) for a in ARMS):
-        return None
-    det = json.loads((config.model_task_dir() / "determinism.json").read_text())
+def t3():
+    lines = []
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        bf, tf = ranking(m, "fix_em", max)
+        for a in ARMS:
+            fix = mark(pct(mean(m, a, "fix_em")), a, bf, tf)
+            lines.append(" & ".join([
+                FMT[a], pct(mean(m, a, "neg_handled")), pct(mean(m, a, "d_refuse")),
+                fix + f"\\,{{\\scriptsize$\\pm${pct(sd(m, a, 'fix_em'))}}}",
+                pct(mean(m, a, "fix_applied")),
+                f"{40 * mean(m, a, 'probe_em'):.1f}"]) + " \\\\")
+    head = ("Format & Neg.\\ handled $\\uparrow$ & Real refused $\\downarrow$ & Corr.\\ EM $\\uparrow$ & "
+            "Corr.\\ applied & Probes /40 \\\\")
+    return tabular("lrrrrr", head, "\n".join(lines))
+
+
+# ---------- appendix tables ----------
+
+def a_sizes():
+    lines = []
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{{1 + 2 * len(SIZES)}}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a in ARMS:
+            cells = []
+            for s in SIZES:
+                cells += [f"{pct(mean(m, a, 'correct', s))}{{\\tiny$\\pm${pct(sd(m, a, 'correct', s))}}}",
+                          f"{pct(mean(m, a, 'silent', s))}"]
+            lines.append(FMT[a] + " & " + " & ".join(cells) + " \\\\")
+    head = (" & " + " & ".join(f"\\multicolumn{{2}}{{c}}{{{tick(s)}}}" for s in SIZES) + " \\\\\n"
+            + " & " + " & ".join(["$A$", "$S$"] * len(SIZES)) + " \\\\")
+    return tabular("l" + "rr" * len(SIZES), head, "\n".join(lines))
+
+
+def a_kinds(block, prefix, kinds, names):
+    lines = []
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{{1 + len(kinds)}}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a in ARMS:
+            vals = [statistics.fmean(C.metrics(m, a, HEAD, s)[block][prefix + k] for s in SEEDS) for k in kinds]
+            lines.append(FMT[a] + " & " + " & ".join(pct(v) for v in vals) + " \\\\")
+    return tabular("l" + "r" * len(kinds), "Format & " + " & ".join(names) + " \\\\", "\n".join(lines))
+
+
+SWEEP_SEEDS = (0, 1, 2)
+
+
+def sweep():
+    """Dev EM per learning rate at the selection size, mean over the sweep seeds."""
+    size = 100_000
+    rows = {}
+    for m in MODELS:
+        for a in ARMS:
+            for d in C.base(m).glob(f"{a}-n{size}-s*-lr*"):
+                if d.name.endswith("rep2") or not (d / "metrics.json").exists():
+                    continue
+                k = json.loads((d / "metrics.json").read_text())
+                if k.get("tag") or k["arm"] != a or k["seed"] not in SWEEP_SEEDS:
+                    continue
+                rows.setdefault((m, a, k["lr"]), []).append(k["dev"]["em"])
+    return rows
+
+
+def a_lr():
+    rows = sweep()
+    lrs = sorted({k[2] for k in rows})
+    lines = []
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{{2 + len(lrs)}}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a in ARMS:
+            chosen = C.lrs(m)[a]
+            cells = []
+            for lr in lrs:
+                v = rows.get((m, a, lr))
+                t = f"{pct(statistics.fmean(v), 2)}" if v else "--"
+                cells.append(f"\\textbf{{{t}}}" if lr == chosen else t)
+            edge = chosen in (min(lrs), max(lrs))
+            lines.append(FMT[a] + " & " + " & ".join(cells) + f" & {'edge' if edge else ''} \\\\")
+    head = "Format & " + " & ".join(f"{lr:.0e}".replace("e-0", "e-") for lr in lrs) + " & \\\\"
+    n_seeds = max(len(v) for v in rows.values())
+    return tabular("l" + "r" * len(lrs) + "l", head, "\n".join(lines)), n_seeds
+
+
+def a_errors():
+    rows = E.load()
+    kinds = [k for k in E.KINDS]
+    lines = []
+    for i, m in enumerate(MODELS):
+        if i:
+            lines.append("\\midrule")
+        lines.append(f"\\multicolumn{{{2 + len(kinds)}}}{{l}}{{\\textit{{{C.LABEL[m]}}}}} \\\\")
+        for a in ARMS:
+            r = next(x for x in rows if (x["model"], x["arm"]) == (m, a))
+            lines.append(FMT[a] + f" & {int(r['n'])} & " + " & ".join(f"{100 * r[k]:.0f}" for k in kinds) + " \\\\")
+    head = "Format & $n$ & " + " & ".join(k.replace(" ", "\\ ") for k in kinds) + " \\\\"
+    return tabular("lr" + "r" * len(kinds), head, "\n".join(lines))
+
+
+# ---------- macros ----------
+
+def integrity():
+    t = (C.OUT / "integrity.txt").read_text()
+    cap = re.search(r"(\d+) of (\d+) generations reached the cap", t)
+    late = re.search(r">= (\d+) of (\d+) steps in (\d+)/(\d+) runs", t)
+    cue = re.search(r"\((\d+) in test, at most ([\d.]+) test EM\)", t)
+    rerun = re.findall(r"(\w+): rerun ([\d.]+), seed SD ([\d.]+)", t)
+    gguf = re.search(r"lfm2 (\d+)% \(gguf", t)
     return {
-        "label": config.model().label,
-        "vocab": config.model().vocab_size,
-        "noise": det["test_abs_diff"],
-        "arms": {a: {"tok": m(by[a], "mean_generated_tokens"),
-                     "em": m(by[a], "em")} for a in ARMS},
+        "capHits": cap.group(1), "nGenerations": pretty(int(cap.group(2))),
+        "lateRuns": late.group(3), "maxSteps": pretty(int(late.group(2))),
+        "cueRows": cue.group(1), "cueBound": pct(float(cue.group(2))),
+        **{f"{P[m]}rerun": pct(float(r)) for m, r, _ in rerun},
+        **{f"{P[m]}rerunSeedSd": pct(float(s)) for m, _, s in rerun},
+        "lfmGgufAgree": gguf.group(1),
     }
 
 
-def replication_table(summaries):
-    """Tokens and exact match per arm, one block per model."""
-    out = ["\\begin{tabular}{l" + "rr" * len(summaries) + "}", "\\toprule"]
-    head = " & ".join(f"\\multicolumn{{2}}{{c}}{{{s['label']}}}" for s in summaries)
-    out.append(f" & {head} \\\\")
-    out.append(" & " + " & ".join(["tok.", "EM"] * len(summaries)) + " \\\\")
-    out.append("\\midrule")
-    for a in ARMS:
-        cells = []
-        for s in summaries:
-            v = s["arms"][a]
-            best = max(s["arms"].values(), key=lambda x: x["em"])["em"]
-            em = f"\\textbf{{{v['em']:.3f}}}" if v["em"] == best else f"{v['em']:.3f}"
-            cells += [f"{v['tok']:.1f}", em]
-        out.append(f"\\fmt{{{LABEL[a]}}} & " + " & ".join(cells) + " \\\\")
-    out += ["\\bottomrule", "\\end{tabular}"]
-    return "\n".join(out)
+def macros(fams):
+    d = {"nSeeds": str(len(SEEDS)), "nSizes": str(len(SIZES)), "nHead": pretty(HEAD), "nSmall": pretty(min(SIZES)),
+         "nArms": str(len(ARMS)), "nGrid": str(len(C.cells())), "nBoot": pretty(S.B),
+         "negFrac": f"{100 * M['negatives']:.0f}", "corFrac": f"{100 * M['corrections']:.0f}"}
+    first = C.metrics(MODELS[0], "words", HEAD, 0)
+    d["nTest"] = pretty(first["test"]["n"])
+    d["nDev"] = pretty(first["dev"]["n"])
+    d["nNeg"] = pretty(first["negatives"]["n"])
+    d["nCor"] = pretty(first["corrections"]["n"])
+    d["samplesSeen"] = pretty(first["samples_seen_max"])
+    d["poolCoverage"] = pct(first["pool_coverage"])
+    d.update(integrity())
 
-
-def replication_macros(summaries):
-    d = {}
-    for s, prefix in zip(summaries, ("primary", "repl")):
-        arms = s["arms"]
-        gap = arms["dsl"]["em"] - arms["words"]["em"]
-        d[f"{prefix}Label"] = s["label"]
-        d[f"{prefix}Vocab"] = f"{s['vocab']:,}".replace(",", "{,}")
-        d[f"{prefix}Noise"] = f"{s['noise']:.3f}"
-        d[f"{prefix}WordsEm"] = f"{arms['words']['em']:.3f}"
-        d[f"{prefix}DslEm"] = f"{arms['dsl']['em']:.3f}"
-        d[f"{prefix}ExrEm"] = f"{arms['exr']['em']:.3f}"
-        # Signed so a positive number always means words ahead of dsl.
-        d[f"{prefix}PairGap"] = f"{-gap:.3f}"
-        d[f"{prefix}WordsTok"] = f"{arms['words']['tok']:.1f}"
-        d[f"{prefix}DslTok"] = f"{arms['dsl']['tok']:.1f}"
-        d[f"{prefix}ExrTok"] = f"{arms['exr']['tok']:.1f}"
-        d[f"{prefix}BestArm"] = LABEL[max(arms, key=lambda a: arms[a]["em"])]
-        # Does words cost more tokens than dsl under this tokenizer? Under LFM2 it
-        # does, which is the strongest form of the argument: more tokens, better.
-        d[f"{prefix}WordsLonger"] = ("yes" if arms["words"]["tok"] > arms["dsl"]["tok"]
-                                     else "no")
+    for m in MODELS:
+        p = P[m]
         for a in ARMS:
-            d[f"{prefix}{MACRO[a]}Tokens"] = f"{arms[a]['tok']:.1f}"
+            k = p + MACRO[a]
+            for name, key in (("Em", "correct"), ("S", "silent"), ("Dp", "d_parse"), ("Dr", "d_refuse"),
+                              ("Neg", "neg_handled"), ("Fix", "fix_em"), ("Applied", "fix_applied")):
+                d[k + name] = pct(mean(m, a, key))
+            d[k + "EmSd"] = pct(sd(m, a, "correct"))
+            d[k + "Tok"] = f"{mean(m, a, 'tokens'):.1f}"
+            d[k + "Hall"] = f"{mean(m, a, 'hallucinated'):.3f}"
+            d[k + "Lat"] = f"{lat_ms(m, a):.0f}"
+            d[k + "EmSmall"] = pct(mean(m, a, "correct", min(SIZES)))
+        r = S.ratio(D.get(m, "exr", HEAD, "silent"), D.get(m, "words", HEAD, "silent"))
+        d[p + "silentRatio"], d[p + "silentRatioLo"], d[p + "silentRatioHi"] = (f"{r[k]:.1f}" for k in ("est", "lo", "hi"))
+        r = S.ratio(D.get(m, "exr", HEAD, "hallucinated"), D.get(m, "words", HEAD, "hallucinated"))
+        d[p + "hallRatio"], d[p + "hallRatioLo"], d[p + "hallRatioHi"] = (f"{r[k]:.1f}" for k in ("est", "lo", "hi"))
+        d[p + "tokRatio"] = f"{mean(m, 'exr', 'tokens') / mean(m, 'words', 'tokens'):.1f}"
+        d[p + "speedup"] = f"{lat_ms(m, 'exr') / lat_ms(m, 'words'):.1f}"
+        xs = [x["mean_generated_tokens"] for v in LAT[m].values() for x in v]
+        ys = [x["median_ms"] for v in LAT[m].values() for x in v]
+        slope, icpt = statistics.linear_regression(xs, ys)
+        d[p + "msPerTok"] = f"{slope:.1f}"
+        d[p + "msFixed"] = f"{icpt:.0f}"
+        d[p + "latRsq"] = f"{statistics.correlation(xs, ys) ** 2:.2f}"
+        mem = [x["gpu_memory_used_by_this_process_mib"] for v in LAT[m].values() for x in v]
+        d[p + "memMin"], d[p + "memMax"] = pretty(min(mem)), pretty(max(mem))
+        d[p + "tpsMin"] = f"{min(statistics.fmean(x['tokens_per_second'] for x in v) for v in LAT[m].values()):.0f}"
+        d[p + "tpsMax"] = f"{max(statistics.fmean(x['tokens_per_second'] for x in v) for v in LAT[m].values()):.0f}"
+        for a, b, metric, _ in PAIRS:
+            res = fams[(m, a, b, metric)]
+            k = p + MACRO[a] + MACRO[b][0].upper() + MACRO[b][1:] + ("S" if metric == "silent" else "")
+            h = res[-1]
+            d[k + "Gap"], d[k + "Lo"], d[k + "Hi"] = spct(h["est"]), spct(h["lo"]), spct(h["hi"])
+            d[k + "GapSmall"] = spct(res[0]["est"])
+            d[k + "Ahead"] = str(sum(r["est"] > 0 for r in res))
+            d[k + "Sep"] = str(sum(r["sep"] and r["est"] > 0 for r in res))
+        refuse = [mean(m, a, "d_refuse") for a in ARMS]
+        d[p + "refuseMin"], d[p + "refuseMax"] = pct(min(refuse)), pct(max(refuse))
+        fix = [mean(m, a, "fix_em") for a in ARMS]
+        d[p + "fixMin"], d[p + "fixMax"] = pct(min(fix)), pct(max(fix))
+        app = [mean(m, a, "fix_applied") for a in ARMS]
+        d[p + "appliedMin"], d[p + "appliedMax"] = pct(min(app), 0), pct(max(app), 0)
+        neg = [mean(m, a, "neg_handled") for a in ARMS]
+        d[p + "negMin"], d[p + "negMax"] = pct(min(neg)), pct(max(neg))
+        unk = [statistics.fmean(C.metrics(m, a, HEAD, s)["negatives"]["handled_unknown"] for s in SEEDS) for a in ARMS]
+        d[p + "unkMin"], d[p + "unkMax"] = pct(min(unk), 0), pct(max(unk), 0)
+        probes = [40 * mean(m, a, "probe_em") for a in ARMS]
+        d[p + "probeMin"], d[p + "probeMax"] = f"{min(probes):.0f}", f"{max(probes):.0f}"
+        d[p + "bestEm"] = C.LABEL[ranking(m, "correct", max)[0]]
+        d[p + "bestS"] = C.LABEL[ranking(m, "silent", min)[0]]
+        d[p + "tiedEm"] = ", ".join(f"\\fmt{{{C.LABEL[a]}}}" for a in sorted(ranking(m, "correct", max)[1], key=ARMS.index)) or "none"
+        d[p + "tiedS"] = ", ".join(f"\\fmt{{{C.LABEL[a]}}}" for a in sorted(ranking(m, "silent", min)[1], key=ARMS.index)) or "none"
+        d[p + "worstArm"] = C.LABEL[min(ARMS, key=lambda a: mean(m, a, "correct"))]
 
-    # How much more the smaller vocabulary costs each arm. This is the measured
-    # form of the tokenizer-floor claim: it should hit the punctuation-heavy
-    # formats far harder than the word-based ones.
-    pri, rep = summaries[0]["arms"], summaries[1]["arms"]
-    for a in ARMS:
-        d[f"infl{MACRO[a]}"] = f"{rep[a]['tok'] / pri[a]['tok']:.2f}"
-    d["inflMax"] = f"{max(rep[a]['tok'] / pri[a]['tok'] for a in ARMS):.2f}"
-    d["inflMin"] = f"{min(rep[a]['tok'] / pri[a]['tok'] for a in ARMS):.2f}"
+        ref = {r["arm"]: r for r in csv_rows("refused.csv") if r["model"] == m}
+        d[p + "wordsPolite"] = pct(float(ref["words"]["refuse_polite"]))
+        d[p + "wordsNotPolite"] = pct(float(ref["words"]["refuse_other"]))
+        oov = [float(r["oov_refused"]) for r in ref.values()]
+        d[p + "oovRefMin"], d[p + "oovRefMax"] = pct(min(oov), 0), pct(max(oov), 0)
+        d[p + "oovAns"] = pct(statistics.fmean(float(r["oov_answered"]) for r in ref.values()), 0)
+        gap = [float(r["dev_training_cues"]) - float(r["test_heldout_cues"]) for r in csv_rows("cue_gap.csv") if r["model"] == m]
+        d[p + "cueGapMin"], d[p + "cueGapMax"] = pct(min(gap), 0), pct(max(gap), 0)
 
-    # How much the format choice moves accuracy, against how much the model choice
-    # does. Generated rather than typed because it is easy to get the direction of
-    # this comparison wrong by hand.
-    for prefix, arms in (("primary", pri), ("repl", rep)):
-        ems = [v["em"] for v in arms.values()]
-        d[f"{prefix}ArmSpread"] = f"{max(ems) - min(ems):.3f}"
-    d["modelGapBest"] = f"{abs(max(v['em'] for v in pri.values()) - max(v['em'] for v in rep.values())):.3f}"
-    return "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(d.items()))
+        kinds = {r["arm"]: r for r in E.load() if r["model"] == m}
+        d[p + "wordsNegErr"] = f"{100 * kinds['words']['negation']:.0f}"
+        others = [kinds[a]["negation"] for a in ARMS if a != "words"]
+        d[p + "otherNegErrMin"], d[p + "otherNegErrMax"] = f"{100 * min(others):.0f}", f"{100 * max(others):.0f}"
+        d[p + "wordsLineErr"] = f"{100 * kinds['words']['line count']:.0f}"
+        d[p + "exrNegRate"] = pct(kinds["exr"]["negation"] * mean(m, "exr", "silent"))
+        d[p + "wordsNegRate"] = pct(kinds["words"]["negation"] * mean(m, "words", "silent"))
+
+        lrs = C.lrs(m)
+        d[p + "lrs"] = ", ".join(f"{C.LABEL[a]} {lrs[a]:.0e}".replace("e-0", "e-") for a in ARMS)
+
+    slopes = {m: [S.slope([D.get(m, a, s, "correct") for a in C.LADDER], [D.get(m, a, s, "tokens") for a in C.LADDER])
+                  for s in SIZES] for m in MODELS}
+    for m, res in slopes.items():
+        for r, p in zip(res, S.holm([r["p"] for r in res])):
+            r["sep"] = p < 0.05
+    allslopes = [r for res in slopes.values() for r in res]
+    d["slopePos"] = str(sum(r["est"] > 0 for r in allslopes))
+    d["slopeSep"] = str(sum(r["sep"] for r in allslopes))
+    d["slopeCells"] = str(len(allslopes))
+    d["slopeMax"] = pct(max(r["est"] for r in allslopes))
+
+    fixed = sum(first_probe_fixed(m, a) for m in MODELS for a in ARMS)
+    d["probeFixed"], d["probeRuns"] = str(fixed), str(len(MODELS) * len(ARMS) * len(SEEDS))
+    d["nPolite"] = str(sum(1 for r in C.predictions("qwen", "words", HEAD, 0)
+                           if re.search(r"\b(hi|hello|hey|please|thanks|thank you|good (morning|afternoon|evening))\b", r["src"])))
+    d["pairCells"] = str(len(MODELS) * len(SIZES))
+    from bench import config
+    config.select("qwen", "pizza")
+    t = config.task()
+    name, em = t.published[0]
+    d["publishedSystem"], d["publishedEm"] = name, pct(em)
+    d["publishedTrainN"] = pretty(t.published_train_n)
+    d["publishedGap"] = str(t.published_train_n - HEAD)
+    return "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(d.items())) + "\n"
 
 
-# ---------------------------------------------------------------------------
-# The cafe task, written only once its grid exists.
-#
-# Two arms, so no ladder and no slope. It was added as one more matched pair, in
-# Russian and English rather than English alone, on the system actually in
-# production. What it in fact produced is a saturated grid: both arms sit within
-# one held-out utterance of each other at every pool size. So this also emits the
-# facts that establish the saturation, because the honest reading of the cafe
-# numbers is a resolution limit and the prose has to be able to say so from
-# measured values rather than from a hopeful adjective.
-#
-# Nothing is emitted while the grid is incomplete, so the paper never contains a
-# placeholder that could be mistaken for a measurement.
-# ---------------------------------------------------------------------------
-
-def coffee_section():
-    config.select("qwen", "coffee")
-    task = config.task()
-    sizes = config.Config.for_active().sizes
-    runs = report.primary_runs(cfg_sizes=sizes)
-    head = max(sizes)
-    by = {}
-    for r in runs:
-        if r["size"] == head:
-            by.setdefault(r["arm"], []).append(r)
-    if not all(by.get(a) for a in task.arms):
-        return None
-
-    rows = []
-    for a in task.arms:
-        rs = by[a]
-        rows.append((a, m(rs, "mean_generated_tokens"), m(rs, "em"),
-                     m(rs, "parse_validity")))
-    # No arm is bolded. Nothing here separates by more than a third of one
-    # held-out utterance, and bolding a winner would read as a result.
-    table = ["\\begin{tabular}{lrrr}", "\\toprule",
-             "arm & tokens & EM & validity \\\\", "\\midrule"]
-    for a, tok, em, val in rows:
-        table.append(f"\\fmt{{{a}}} & {tok:.1f} & {em:.3f} & {val:.3f} \\\\")
-    table += ["\\bottomrule", "\\end{tabular}"]
-
-    d = {"coffeeN": str(by[task.arms[0]][0]["test"]["n"]),
-         "coffeeHead": f"{head:,}".replace(",", "{,}")}
-    for a, tok, em, val in rows:
-        key = "coffeeCompact" if a == "compact" else "coffeeWords"
-        d[key + "Em"] = f"{em:.3f}"
-        d[key + "Tok"] = f"{tok:.1f}"
-    gap = float(d["coffeeWordsEm"]) - float(d["coffeeCompactEm"])
-    d["coffeePairGap"] = f"{gap:+.3f}"
-
-    # One held-out utterance is worth this much exact match. With 49 cases it is
-    # 2.0 points, which is larger than any difference the grid shows.
-    n = int(d["coffeeN"])
-    d["coffeeResolution"] = f"{100 / n:.1f}"
-
-    # Every cell, not just the headline, and how many matched pairs separate.
-    cells = [r["test"]["em"] for r in runs]
-    d["coffeeEmMin"] = f"{min(cells):.3f}"
-    d["coffeeEmMax"] = f"{max(cells):.3f}"
-    pairs = report.matched_pairs(runs, "test")
-    d["coffeePairsTotal"] = str(len(pairs))
-    d["coffeePairsSep"] = str(sum(1 for r in pairs if not r["within_noise"]))
-    d["coffeeNoise"] = f"{json.loads((config.model_task_dir() / 'determinism.json').read_text())['test_abs_diff']:.3f}"
-
-    # The production numbers the task does support, which is why it is in the
-    # paper at all now that it resolves nothing about format.
-    lat = {x["arm"]: x for x in report.latency_table()}
-    for a in task.arms:
-        key = "coffeeCompact" if a == "compact" else "coffeeWords"
-        if a in lat:
-            d[key + "Lat"] = f"{lat[a]['median_ms']:.0f}"
-
-    macros = "\n".join(f"\\newcommand{{\\{k}}}{{{v}}}" for k, v in sorted(d.items()))
-    return "\n".join(table), macros
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    for stale in ("main_table.tex", "matched_pairs.tex", "replication.tex", "replication_macros.tex",
+                  "slopes.tex", "coffee.tex", "coffee_macros.tex"):
+        (OUT / stale).unlink(missing_ok=True)
+    t2_short, t2_ci, fams = t2()
+    lr_table, lr_seeds = a_lr()
+    files = {
+        "t1_main.tex": t1(),
+        "t2_pairs.tex": t2_short,
+        "t3_guardrail.tex": t3(),
+        "a_pairs_ci.tex": t2_ci,
+        "a_sizes.tex": a_sizes(),
+        "a_negatives.tex": a_kinds("negatives", "handled_", ["junk", "long", "non", "off", "mixed", "unknown", "probe"],
+                                   ["junk", "long", "non-order", "off-menu", "mixed", "unknown word", "probe"]),
+        "a_corrections.tex": a_kinds("corrections", "em_",
+                                     ["swap", "retract", "only", "size", "number", "drink", "cancel", "restart", "decoy"],
+                                     ["swap", "retract", "only", "size", "number", "drink", "cancel", "restart", "decoy"]),
+        "a_lr.tex": lr_table,
+        "a_errors.tex": a_errors(),
+        "macros.tex": macros(fams) + f"\\newcommand{{\\nSweepSeeds}}{{{lr_seeds}}}\n",
+        "colors.tex": latex_colors() + "\n",
+    }
+    for name, text in files.items():
+        (OUT / name).write_text(text)
+        print("wrote", OUT / name)
 
 
 if __name__ == "__main__":
-    by, by_small = load(HEADLINE), load(SMALL)
-    if not by:
-        sys.exit("no completed runs")
-    OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "main_table.tex").write_text(wrap(HEAD_MAIN, main_table(by)) + "\n")
-    (OUT / "matched_pairs.tex").write_text(wrap(HEAD_PAIRS, matched_pairs_table()) + "\n")
-    (OUT / "slopes.tex").write_text(wrap(HEAD_SLOPE, slope_table()) + "\n")
-    (OUT / "macros.tex").write_text(macros(by, by_small) + "\n")
-    (OUT / "colors.tex").write_text(latex_colors() + "\n")
-    for f in sorted(OUT.iterdir()):
-        print("wrote", f)
-
-    # Replication last, because it re-selects the model and leaves that selection
-    # behind; everything above is the primary model's.
-    summaries = [x for x in (_model_summary(n) for n in REPLICATION_MODELS) if x]
-    if len(summaries) > 1:
-        (OUT / "replication.tex").write_text(replication_table(summaries) + "\n")
-        (OUT / "replication_macros.tex").write_text(replication_macros(summaries) + "\n")
-        print(f"wrote {OUT / 'replication.tex'} ({len(summaries)} models)")
-    else:
-        print("only one model has a complete grid; skipping the replication table")
-
-    coffee = coffee_section()
-    if coffee:
-        (OUT / "coffee.tex").write_text(coffee[0] + "\n")
-        (OUT / "coffee_macros.tex").write_text(coffee[1] + "\n")
-        print(f"wrote {OUT / 'coffee.tex'}")
-    else:
-        print("cafe grid incomplete; its section stays out of the paper")
+    main()

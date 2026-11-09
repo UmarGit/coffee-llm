@@ -49,7 +49,7 @@ async function rounds() {
   };
 }
 
-const KEEP = ["formats.json", "hero.json", "examples.json", "counts.qwen.json"];
+const KEEP = ["formats.json", "hero.json", "examples.json", "counts.qwen.json", "guardrail.json"];
 
 // The live model: its export manifest, plus where the published site downloads
 // it from. GitHub cannot hold an 834 MB file, so it lives on Hugging Face.

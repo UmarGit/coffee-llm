@@ -10,6 +10,8 @@ import guard from "../../data/guardrail.json";
 
 const REPO = "https://github.com/UmarGit/coffee-llm";
 const G = guard.negatives;
+const F = guard.corrections;
+const cheese = guard.fixProbes[0]!;
 const pct0 = (x: number) => Math.round(x * 100);
 // The gate replays the run's real refusals and real test orders (accepted at the
 // measured rate); see data/guardrail.json.
@@ -54,7 +56,7 @@ const grid = { exr: hundred(qwen.arms.exr!), words: hundred(qwen.arms.words!) };
 
 const W = qwen.arms.words!, X = qwen.arms.exr!, D = qwen.arms.dsl!;
 const speedup = (X.latencyMs / W.latencyMs).toFixed(1);
-const silentRatio = (X.silent / W.silent).toFixed(0);
+const silentRatio = (X.silent / W.silent).toFixed(1);
 const LW = lfm2.arms.words!, LD = lfm2.arms.dsl!;
 
 const h = hero.silentError;
@@ -438,10 +440,20 @@ const race = {
           <div><b>{guard.probes.length}/{guard.probes.length}</b><span>demo-style prompts refused</span></div>
           <div class="cost"><b data-count={(G.false_reject_on_test * 100).toFixed(1)} data-dec="1">0</b><span>of real orders refused too: the price of strictness</span></div>
         </div>
+        <p class="lead fade-up">
+          It also learned to listen when people change their mind mid-sentence.
+          Told <em>“{cheese.src}”</em>, it now writes <code>{cheese.raw}</code>,
+          in {F.reportedFixed} of {guard.seeds} runs.
+        </p>
+        <div class="gate-stats">
+          <div><b data-count={pct0(F.applied)} data-dec="0">0</b><span>of corrections it never trained on, applied</span></div>
+          <div><b data-count={pct0(F.em)} data-dec="0">0</b><span>of corrected orders exactly right</span></div>
+        </div>
         <p class="fine-print fade-up">
           Refusals shown are the run's real outputs on its challenge prompts;
           accepted orders are real PIZZA test orders, passing at the measured rate.
-          The paper's numbers above come from models trained without this guardrail.
+          Every number on this page, above and below, comes from models trained
+          with this guardrail, averaged over {guard.seeds} training runs.
         </p>
       </section>
 
@@ -459,8 +471,8 @@ const race = {
           <div class="cr-paper">
             <span class="who">the research</span>
             <p class="cr-title">
-              Fewer Tokens, Fewer Silent Errors: Output Format Design for Small
-              Language Models in Real Time Order Parsing
+              Parsed, Plausible, Wrong: Output Format Controls Silent Errors in
+              Small-Model Semantic Parsing
             </p>
             <p class="cr-links">
               <a href={REPO + "/blob/main/paper/paper.pdf"}>Read the paper</a>
@@ -485,10 +497,10 @@ const race = {
           <p class="cr-fine">
             {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
             benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
-            three seeds each: every format number on the page comes from those
-            runs. The café figures come from the café parser, and the guardrail
-            figures and the live demo from a stricter variant ({model.run_id})
-            trained to refuse anything that is not a menu order. PIZZA is CC-BY-NC-4.0, so this site
+            five seeds each, every run trained to refuse anything that is not a
+            menu order and to apply spoken corrections. Every format and guardrail
+            number on the page is a mean over those seeds. The café figures come
+            from the café parser, and the live demo runs {model.run_id}. PIZZA is CC-BY-NC-4.0, so this site
             and the models derived from it are for non-commercial research use.
           </p>
         </footer>

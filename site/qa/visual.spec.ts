@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const SECTIONS = ["order", "spell", "rank", "silent", "race", "again", "cafe", "end"];
+const SECTIONS = ["order", "spell", "rank", "silent", "race", "again", "cafe", "gate", "end"];
 
 for (const [w, h] of [[1440, 900], [390, 844]] as const) {
   test(`sections at ${w}px`, async ({ page }, info) => {

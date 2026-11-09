@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "sources": [
-    "words-n2456443-s0-lr0.0001-neg30-fresh-20261029"
+    "words-n2456443-s0-lr0.0002"
   ],
   "url": "https://huggingface.co/umarsheikh303/pizza-words-gguf/resolve/main/pizza-words-q8_0.gguf",
   "page": "https://huggingface.co/umarsheikh303/pizza-words-gguf",
-  "run_id": "words-n2456443-s0-lr0.0001-neg30-fresh-20261029",
+  "run_id": "words-n2456443-s0-lr0.0002",
   "model": "qwen",
   "base": "Qwen/Qwen3.5-0.8B",
   "task": "pizza",
@@ -16,38 +16,34 @@
   "licence": "CC-BY-NC-4.0",
   "negatives": 0.3,
   "reject": "?",
+  "corrections": 0.1,
   "files": {
     "q8_0": {
-      "file": "pizza-qwen-words-n2456443-s0-lr0.0001-neg30-fresh-20261029-q8_0.gguf",
-      "bytes": 833591904,
-      "sha256": "188df7ebc3d119b3fd5f4aa2d25ffbbf2288c41da678a1b6b97985a9aea0c97f",
+      "file": "pizza-qwen-words-n2456443-s0-lr0.0002-q8_0.gguf",
+      "bytes": 833591872,
+      "sha256": "97469c7b9bce33d387681a88112fdf5cf108815b257986682b3e3623e3e97cac",
       "verify": {
         "n": 200,
-        "agreement_with_saved": 0.985,
-        "em_gguf": 0.955,
-        "em_saved_same_rows": 0.94,
-        "parse_validity_gguf": 0.965,
-        "median_ms_server": 1102,
+        "agreement_with_saved": 0.99,
+        "em_gguf": 0.94,
+        "em_saved_same_rows": 0.935,
+        "parse_validity_gguf": 0.97,
+        "median_ms_server": 1194.9,
         "first_disagreements": [
           {
-            "src": "i would like to have one pie along with ham and olives without pepperoni",
-            "saved": "pizza 1 style all_toppings ham olives no pepperoni",
-            "gguf": "pizza 1 ham olives no pepperoni"
+            "src": "i need to order a medium pizza with sausage and ham and a medium pizza with pepperoni and sausage and a small pizza with mushrooms and green peppers",
+            "saved": "pizza 1 small mushrooms green_peppers ; pizza 1 medium sausage ham pepperoni ; pizza 1 medium sausage ham",
+            "gguf": "pizza 1 small mushrooms green_peppers ; pizza 1 medium sausage ham pepperoni ; pizza 1 medium sausage mushrooms green_peppers"
           },
           {
-            "src": "get me an olive and pepperoni pizza with no pesto",
-            "saved": "pizza 1 olive pepperoni no pesto",
-            "gguf": "pizza 1 olives pepperoni no pesto"
-          },
-          {
-            "src": "i want to order a small pepper sausage and pineapple pizza",
-            "saved": "pizza 1 small pepper sausage pineapple",
-            "gguf": "pizza 1 small peppers sausage pineapple"
+            "src": "i want to have one medium cheese pizza and two small pizza and also two cokes",
+            "saved": "?",
+            "gguf": "drink 2 coke ; pizza 2 small ; pizza 1 medium cheese"
           }
         ]
       }
     }
   },
-  "bytes": 833591904,
-  "sha256": "188df7ebc3d119b3fd5f4aa2d25ffbbf2288c41da678a1b6b97985a9aea0c97f"
+  "bytes": 833591872,
+  "sha256": "97469c7b9bce33d387681a88112fdf5cf108815b257986682b3e3623e3e97cac"
 }

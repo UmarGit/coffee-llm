@@ -136,3 +136,11 @@ VERSION
 
 # Candidate GGUFs fetched for probing (handover.md).
 candidate/
+
+# WWW 2027 demo paper and its benchmark tooling: local only for now.
+www2027_demo/
+
+# Analysis outputs hold PIZZA-derived rows (analysis.md).
+analysis/out/
+neg-v1-results-light/
+neg-v1-results/

@@ -15,10 +15,12 @@ where a reimplementation drifts.
 import json
 import subprocess
 import sys
+import os
 from glob import glob
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+RUNS = Path(os.environ.get("BENCH_RUNS", REPO / "runs"))
 sys.path.insert(0, str(REPO / "src"))
 
 from bench.tasks.pizza import metrics
@@ -29,7 +31,7 @@ TS = REPO / "site" / "src" / "lib" / "matcher.ts"
 def pairs():
     """(predicted EXR or None, gold EXR) for every saved prediction."""
     out = []
-    for f in sorted(glob(str(REPO / "runs/*/pizza/*/test_predictions.jsonl"))):
+    for f in sorted(glob(str(RUNS / "*/pizza/*/test_predictions.jsonl"))):
         arm = Path(f).parent.name.split("-")[0]
         for line in Path(f).read_text().splitlines():
             if not line.strip():

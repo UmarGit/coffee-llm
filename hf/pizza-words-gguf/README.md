@@ -24,10 +24,10 @@ Silent Errors in Small-Model Semantic Parsing* (in preparation), from the IDM
 (Intelligent Decision Making) Lab, ITMO University:
 
 - Umar Ahmed, ITMO University · ORCID [0009-0003-6040-6328](https://orcid.org/0009-0003-6040-6328)
-- Maxim Duanev, ITMO University · ORCID [0009-0009-2988-9839](https://orcid.org/0009-0009-2988-9839)
+- Maxim Dunaev, ITMO University · ORCID [0009-0009-2988-9839](https://orcid.org/0009-0009-2988-9839)
 - Mohammad Nour Al Awad, ITMO University · ORCID [0009-0008-5078-9800](https://orcid.org/0009-0008-5078-9800)
 - Sergey Ivanov, ITMO University · ORCID [0000-0002-1128-2942](https://orcid.org/0000-0002-1128-2942)
-- Ivan V. Khodnenko, ITMO University · ORCID [0009-0003-7787-7126](https://orcid.org/0009-0003-7787-7126)
+- Ivan Khodnenko, ITMO University · ORCID [0009-0003-7787-7126](https://orcid.org/0009-0003-7787-7126)
 
 Code: [UmarGit/coffee-llm](https://github.com/UmarGit/coffee-llm). A smaller
 sibling trained the same way: [pizza-lfm2-words-gguf](https://huggingface.co/umarsheikh303/pizza-lfm2-words-gguf).

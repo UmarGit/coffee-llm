@@ -144,3 +144,7 @@ www2027_demo/
 analysis/out/
 neg-v1-results-light/
 neg-v1-results/
+# arXiv package build output (rebuilt by make -C paper arxiv)
+paper/arxiv/
+paper/arxiv.tar.gz
+paper/paper-arxiv.pdf

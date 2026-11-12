@@ -9,6 +9,14 @@ import model from "../../data/model.json";
 import guard from "../../data/guardrail.json";
 
 const REPO = "https://github.com/UmarGit/coffee-llm";
+// The output-format study (six encodings, speed, replication, café) belongs to a
+// paper under double-blind review. Until its decision the page shows the demo
+// only; build with PUBLIC_SHOW_STUDY=1 for the full story.
+const study = import.meta.env.PUBLIC_SHOW_STUDY === "1";
+const TITLE = study ? "Parsed, Plausible, Wrong" : "Clean Tickets, Wrong Orders";
+const DESCRIPTION = study
+  ? "A tiny AI reads pizza orders. Sometimes it's wrong and nothing notices. How the way it writes its answer changes that."
+  : "A small language model reads pizza orders inside your browser tab. Sometimes its ticket looks perfect and is still wrong. Catch it, or cause it.";
 const G = guard.negatives;
 const F = guard.corrections;
 const cheese = guard.fixProbes[0]!;
@@ -73,8 +81,8 @@ const race = {
          in-browser model can use every core. Must run before anything else. -->
     <script is:inline src={`${base}coi-serviceworker.min.js`}></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Parsed, Plausible, Wrong</title>
-    <meta name="description" content="A tiny AI reads pizza orders. Sometimes it's wrong and nothing notices. How the way it writes its answer changes that." />
+    <title>{TITLE}</title>
+    <meta name="description" content={DESCRIPTION} />
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href={`${base}favicon.svg`} type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -94,15 +102,23 @@ const race = {
       <section id="hero" class="hero" data-label="">
         <div class="hero-grid">
           <div>
-            <h1 class="kinetic" aria-label="Parsed, plausible, wrong.">
-              <span class="line" data-split>Parsed,</span>
-              <span class="line" data-split>Plausible,</span>
-              <span class="line wrong" data-split>Wrong.</span>
-            </h1>
+            {study ? (
+              <h1 class="kinetic" aria-label="Parsed, plausible, wrong.">
+                <span class="line" data-split>Parsed,</span>
+                <span class="line" data-split>Plausible,</span>
+                <span class="line wrong" data-split>Wrong.</span>
+              </h1>
+            ) : (
+              <h1 class="kinetic" aria-label="Clean ticket. Wrong order.">
+                <span class="line" data-split>Clean</span>
+                <span class="line" data-split>ticket.</span>
+                <span class="line wrong" data-split>Wrong order.</span>
+              </h1>
+            )}
             <p class="sub fade-up">
-              A tiny AI reads pizza orders. Sometimes its answer looks perfect and
-              is still wrong, and nothing catches it. Scroll to see why, and a
-              surprisingly simple way to halve it.
+              {study
+                ? "A tiny AI reads pizza orders. Sometimes its answer looks perfect and is still wrong, and nothing catches it. Scroll to see why, and a surprisingly simple way to halve it."
+                : "A tiny AI reads pizza orders, right here in your browser. Sometimes its ticket looks perfect and is still wrong, and nothing catches it. Scroll to see it happen, then try to catch it, or cause it."}
             </p>
           </div>
           <div class="live fade-up" data-mode="demo">
@@ -161,14 +177,14 @@ const race = {
             <article class="step model-card">
               <span class="step-n">02 · the model writes</span>
               <div class="screen">
-                <div class="screen-bar"><span></span><span></span><span></span><b>0.8B · symbols format</b></div>
+                <div class="screen-bar"><span></span><span></span><span></span><b>{study ? "0.8B · symbols format" : "0.8B model"}</b></div>
                 <span class="toks">
                   {h.tokens.filter((t) => t.replace(/^·/, "")).map((t, i) => (
                     <span class={`tk ${t.startsWith("·") ? "sp" : ""}`} style={`--i:${i}`}>{t.replace(/^·/, "")}</span>
                   ))}<span class="caret" aria-hidden="true"></span>
                 </span>
               </div>
-              <span class="step-foot">{h.tokens.length} tokens in the symbols format, one at a time</span>
+              <span class="step-foot">{h.tokens.length} tokens{study ? " in the symbols format" : ""}, one at a time</span>
             </article>
             <div class="wire" aria-hidden="true"><i></i></div>
             <article class="step ticket-card">
@@ -192,11 +208,14 @@ const race = {
       <div class="band" aria-hidden="true">
         <div class="track">
           {Array.from({ length: 6 }).map(() => (
-            <span>parsed <em>✓</em> plausible <em>✓</em> wrong <em class="x">✗</em></span>
+            study
+              ? <span>parsed <em>✓</em> plausible <em>✓</em> wrong <em class="x">✗</em></span>
+              : <span>parses <em>✓</em> looks right <em>✓</em> wrong <em class="x">✗</em></span>
           ))}
         </div>
       </div>
 
+      {study && <Fragment>
       <!-- 2 · Six spellings -->
       <section id="spell" class="scene" data-steps="6" data-label="Six spellings" data-tint="violet">
         <div class="stage">
@@ -291,6 +310,8 @@ const race = {
         <h2 class="big" data-reveal>Words cut silent errors by {silentRatio}×.</h2>
       </section>
 
+      </Fragment>}
+
       <!-- 4b · The game -->
       <section id="game" class="plain game" data-label="Your turn" data-tint="amber">
         <p class="kicker fade-up">Your turn</p>
@@ -362,6 +383,7 @@ const race = {
         <script type="application/json" id="game-data" is:inline set:html={JSON.stringify(picked.game)} />
       </section>
 
+      {study && <Fragment>
       <!-- 5 · Speed -->
       <section id="race" class="plain" data-label="Speed" data-tint="blue"
         data-race={JSON.stringify(race)}>
@@ -415,17 +437,28 @@ const race = {
         </p>
       </section>
 
+      </Fragment>}
+
       <!-- 8 · The guardrail -->
       <section id="gate" class="plain gate-sec" data-label="Guardrail" data-tint="red"
         data-gate={JSON.stringify(gate)}>
         <p class="kicker fade-up">The guardrail</p>
         <h2 class="big" data-reveal>Only the menu gets in.</h2>
-        <p class="lead fade-up">
-          People type anything into a demo, so the live pizza model learned the
-          café parser's trick: parse orders from the menu and answer
-          <code>?</code> to everything else, from gibberish and chatter to horses
-          and orders with anything extra in them.
-        </p>
+        {study ? (
+          <p class="lead fade-up">
+            People type anything into a demo, so the live pizza model learned the
+            café parser's trick: parse orders from the menu and answer
+            <code>?</code> to everything else, from gibberish and chatter to horses
+            and orders with anything extra in them.
+          </p>
+        ) : (
+          <p class="lead fade-up">
+            People type anything into a demo, so the live model parses orders from
+            the menu and answers <code>?</code> to everything else, from gibberish
+            and chatter to horses. A <code>?</code> is a loud error on purpose:
+            nothing goes to the kitchen, and the system asks again.
+          </p>
+        )}
         <div class="gate fade-up" aria-label="Inputs flowing toward the model: menu orders pass, everything else is refused">
           <div class="gate-lane"></div>
           <div class="gate-door" aria-hidden="true"><span>model</span></div>
@@ -434,6 +467,12 @@ const race = {
             <span class="g-out"><b>0</b> refused with ?</span>
           </div>
         </div>
+        {!study && (
+          <div class="gate-stats">
+            <div><b>{guard.probes.length}/{guard.probes.length}</b><span>of these prompts refused</span></div>
+          </div>
+        )}
+        {study && <Fragment>
         <div class="gate-stats">
           <div><b data-count={pct0(G.handled_junk)} data-dec="0">0</b><span>of gibberish refused</span></div>
           <div><b data-count={pct0(G.handled)} data-dec="0">0</b><span>of nonsense it never saw, refused</span></div>
@@ -449,11 +488,11 @@ const race = {
           <div><b data-count={pct0(F.applied)} data-dec="0">0</b><span>of corrections it never trained on, applied</span></div>
           <div><b data-count={pct0(F.em)} data-dec="0">0</b><span>of corrected orders exactly right</span></div>
         </div>
+        </Fragment>}
         <p class="fine-print fade-up">
-          Refusals shown are the run's real outputs on its challenge prompts;
-          accepted orders are real PIZZA test orders, passing at the measured rate.
-          Every number on this page, above and below, comes from models trained
-          with this guardrail, averaged over {guard.seeds} training runs.
+          Refusals shown are the model's real outputs on these prompts; accepted
+          orders are real PIZZA test orders.
+          {study && ` Every number on this page, above and below, comes from models trained with this guardrail, averaged over ${guard.seeds} training runs.`}
         </p>
       </section>
 
@@ -461,21 +500,29 @@ const race = {
       <section id="end" class="end" data-label="" data-tint="violet">
         <div class="assemble">
           <div class="assemble-stage">
-            <h2 class="kinetic small outro" aria-label="Let small models speak in words.">
-              <span class="line" data-split>Let small models</span>
-              <span class="line accent" data-split>speak in words.</span>
-            </h2>
+            {study ? (
+              <h2 class="kinetic small outro" aria-label="Let small models speak in words.">
+                <span class="line" data-split>Let small models</span>
+                <span class="line accent" data-split>speak in words.</span>
+              </h2>
+            ) : (
+              <h2 class="kinetic small outro" aria-label="A clean ticket is not a correct one.">
+                <span class="line" data-split>A clean ticket</span>
+                <span class="line accent" data-split>is not a correct one.</span>
+              </h2>
+            )}
           </div>
         </div>
         <footer class="credits">
           <div class="cr-paper">
-            <span class="who">the research</span>
+            <span class="who">{study ? "the research" : "the demo"}</span>
             <p class="cr-title">
-              Parsed, Plausible, Wrong: Output Format Controls Silent Errors in
-              Small-Model Semantic Parsing
+              {study
+                ? "Parsed, Plausible, Wrong: Output Format Controls Silent Errors in Small-Model Semantic Parsing"
+                : "Clean Tickets, Wrong Orders: Catching Silent Errors with a Language Model in Your Browser Tab"}
             </p>
             <p class="cr-links">
-              <a href={REPO + "/blob/main/paper/paper.pdf"}>Read the paper</a>
+              {study && <a href={REPO + "/blob/main/paper/paper.pdf"}>Read the paper</a>}
               <a href={REPO}>Code</a>
               <a href={model.page}>Model</a>
             </p>
@@ -494,15 +541,26 @@ const race = {
             <span class="who">research group</span>
             <p><b>IDM Lab</b><span>Intelligent Decision Making</span><span>ITMO University</span></p>
           </div>
-          <p class="cr-fine">
-            {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
-            benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
-            five seeds each, every run trained to refuse anything that is not a
-            menu order and to apply spoken corrections. Every format and guardrail
-            number on the page is a mean over those seeds. The café figures come
-            from the café parser, and the live demo runs {model.run_id}. PIZZA is CC-BY-NC-4.0, so this site
-            and the models derived from it are for non-commercial research use.
-          </p>
+          {study ? (
+            <p class="cr-fine">
+              {qwen.label} and {lfm2.label}, fine-tuned on the public PIZZA
+              benchmark: {counts.total.toLocaleString("en-US")} held-out orders,
+              five seeds each, every run trained to refuse anything that is not a
+              menu order and to apply spoken corrections. Every format and guardrail
+              number on the page is a mean over those seeds. The café figures come
+              from the café parser, and the live demo runs {model.run_id}. PIZZA is CC-BY-NC-4.0, so this site
+              and the models derived from it are for non-commercial research use.
+            </p>
+          ) : (
+            <p class="cr-fine">
+              The live demo runs {model.base}, fine-tuned on the public PIZZA
+              benchmark ({model.run_id}), quantized to 8 bits and run in your
+              browser through llama.cpp compiled to WebAssembly. The game's tickets
+              are that model's saved outputs on the {counts.total.toLocaleString("en-US")}
+              held-out test orders. PIZZA is CC-BY-NC-4.0, so this site and the
+              model derived from it are for non-commercial research use.
+            </p>
+          )}
         </footer>
       </section>
     </main>

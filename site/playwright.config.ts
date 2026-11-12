@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [["list"], ["html", { outputFolder: "qa/report", open: "never" }]],
   use: {
-    baseURL: "http://localhost:4321/coffee-llm/",
+    baseURL: "http://localhost:4321/",
     video: "on",
     trace: "retain-on-failure",
   },
@@ -17,7 +17,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run build && npm run preview",
-    url: "http://localhost:4321/coffee-llm/",
+    url: "http://localhost:4321/",
     reuseExistingServer: true,
     timeout: 120_000,
   },

@@ -229,6 +229,8 @@ function order() {
 interface Spell { f: string; name: string; text: string; tokens: string[] }
 
 function spell() {
+  // The format-study sections are only built with PUBLIC_SHOW_STUDY=1.
+  if (!document.querySelector("#spell")) return;
   const data: Spell[] = JSON.parse($("#spell-data").textContent!);
   const root = $("#spell .spell");
   const name = $(".spell-name", root);
@@ -261,6 +263,7 @@ function spell() {
 /* ---------- 3 · ranking ---------- */
 
 function ranks() {
+  if (!document.querySelector("#rank")) return;
   const box = $("#rank .ranks");
   const rows = $$(".rk", box);
   const buttons = $$<HTMLButtonElement>("#rank .toggle button");
@@ -282,6 +285,7 @@ function ranks() {
 /* ---------- 4 · a hundred orders ---------- */
 
 function hundred() {
+  if (!document.querySelector("#silent")) return;
   const sec = $("#silent");
   const cells = $$(".hundred i", sec);
   // Fixed shuffle, so the same cell always means the same order across steps
@@ -315,6 +319,7 @@ function hundred() {
 /* ---------- 5 · race ---------- */
 
 function race() {
+  if (!document.querySelector("#race")) return;
   const sec = $("#race");
   const data = JSON.parse(sec.dataset.race!) as Record<string, { ms: number; tokens: string[] }>;
   const SLOW = 2;

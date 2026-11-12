@@ -10,9 +10,10 @@ const isolation = {
 };
 
 export default defineConfig({
-  // Served at https://umargit.github.io/coffee-llm/ by .github/workflows/pages.yml.
-  site: "https://umargit.github.io",
-  base: "/coffee-llm",
+  // Served at https://wrong.cuyor.com/ by .github/workflows/pages.yml (custom domain
+  // set in the repo's Settings -> Pages; DNS: CNAME wrong -> umargit.github.io).
+  site: "https://wrong.cuyor.com",
+  base: "/",
   output: "static",
   build: { inlineStylesheets: "auto" },
   server: { headers: isolation },
